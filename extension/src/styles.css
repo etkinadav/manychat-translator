@@ -1,0 +1,140 @@
+/*
+ * Manychat Translator — injected styles
+ *
+ * Lifecycle classes on `.mc-ai-translation`:
+ *   .loading  -> shows the 3-dot spinner
+ *   .updated  -> plays a one-shot highlight sweep + pulse
+ *   .error    -> red-tinted "translation failed" pill
+ */
+
+/* ──────────────────────────────────────────────────────────────────────── */
+/* Base translation block                                                  */
+/* ──────────────────────────────────────────────────────────────────────── */
+
+.mc-ai-translation {
+  display: block;
+  position: relative;
+  margin-top: 4px;
+  padding: 4px 6px;
+  background: rgba(255, 255, 0, 0.15);
+  border-radius: 6px;
+  font-size: 0.9em;
+  line-height: 1.35;
+  color: inherit;
+
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  unicode-bidi: plaintext;
+
+  max-width: 100%;
+  box-sizing: border-box;
+  pointer-events: auto;
+
+  overflow: hidden;
+  transition: background-color 0.25s ease;
+}
+
+/* ──────────────────────────────────────────────────────────────────────── */
+/* Loading state + spinner                                                 */
+/* ──────────────────────────────────────────────────────────────────────── */
+
+.mc-ai-translation.loading {
+  background: rgba(255, 255, 0, 0.08);
+  min-height: 18px;
+}
+
+.mc-spinner {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 12px;
+}
+
+.mc-spinner span {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.45;
+  animation: mc-spinner-bounce 0.9s infinite ease-in-out;
+}
+
+.mc-spinner span:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.mc-spinner span:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@keyframes mc-spinner-bounce {
+  0%, 80%, 100% {
+    transform: translateY(0);
+    opacity: 0.35;
+  }
+  40% {
+    transform: translateY(-3px);
+    opacity: 0.9;
+  }
+}
+
+/* ──────────────────────────────────────────────────────────────────────── */
+/* Updated state — one-shot highlight sweep                                */
+/* ──────────────────────────────────────────────────────────────────────── */
+
+.mc-ai-translation.updated {
+  animation: mc-pulse 0.9s ease-out 1;
+}
+
+/* Light sweep that travels left-to-right across the block once. */
+.mc-ai-translation.updated::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(120, 200, 255, 0.55) 50%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  transform: translateX(-100%);
+  animation: mc-sweep 0.9s ease-out 1;
+}
+
+@keyframes mc-pulse {
+  0% {
+    background-color: rgba(120, 200, 255, 0.45);
+    box-shadow: 0 0 0 0 rgba(120, 200, 255, 0.45);
+  }
+  60% {
+    background-color: rgba(120, 200, 255, 0.2);
+    box-shadow: 0 0 0 6px rgba(120, 200, 255, 0);
+  }
+  100% {
+    background-color: rgba(255, 255, 0, 0.15);
+    box-shadow: 0 0 0 0 rgba(120, 200, 255, 0);
+  }
+}
+
+@keyframes mc-sweep {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+/* ──────────────────────────────────────────────────────────────────────── */
+/* Error state                                                             */
+/* ──────────────────────────────────────────────────────────────────────── */
+
+.mc-ai-translation.error {
+  background: rgba(255, 0, 0, 0.12);
+  color: #b3261e;
+  font-style: italic;
+}
