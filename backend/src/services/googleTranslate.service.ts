@@ -1,5 +1,5 @@
 /**
- * Google Translate v3 integration — Hebrew → English only.
+ * Google Translate v3 integration — batched translate to a target language.
  *
  * Auth:
  *   Uses Application Default Credentials (ADC). Locally this means the
@@ -23,7 +23,7 @@ import { v3 } from "@google-cloud/translate";
 
 const { TranslationServiceClient } = v3;
 
-const TARGET_LANGUAGE_CODE = "en";
+const DEFAULT_TARGET_LANGUAGE = "en";
 const LOCATION = "global";
 
 const translationClient = new TranslationServiceClient();
@@ -69,7 +69,7 @@ export function ensureProjectIdResolved(): Promise<void> {
 }
 
 /**
- * Translate a batch of Hebrew (or any source) strings into English.
+ * Translate a batch of strings into `targetLanguageCode` (default `"en"`).
  *
  * Contract:
  *   - Returns an array the SAME LENGTH as `texts`, in the same order.
@@ -79,7 +79,10 @@ export function ensureProjectIdResolved(): Promise<void> {
  *     originals, so the extension keeps rendering (silently un-translated)
  *     rather than blanking out.
  */
-export async function translateTexts(texts: string[]): Promise<string[]> {
+export async function translateTexts(
+  texts: string[],
+  targetLanguageCode: string = DEFAULT_TARGET_LANGUAGE,
+): Promise<string[]> {
   if (texts.length === 0) return [];
 
   try {
@@ -96,9 +99,10 @@ export async function translateTexts(texts: string[]): Promise<string[]> {
     return [...texts];
   }
 
+  const target = targetLanguageCode.trim() || DEFAULT_TARGET_LANGUAGE;
   const totalChars = texts.reduce((sum, t) => sum + t.length, 0);
   console.log(
-    `[gtranslate] translate -> en | texts=${texts.length} | chars=${totalChars} | projectIdSource=${projectIdSource}`,
+    `[gtranslate] translate -> ${target} | texts=${texts.length} | chars=${totalChars} | projectIdSource=${projectIdSource}`,
   );
 
   const started = Date.now();
@@ -107,7 +111,7 @@ export async function translateTexts(texts: string[]): Promise<string[]> {
       parent: cachedParent,
       contents: texts,
       mimeType: "text/plain",
-      targetLanguageCode: TARGET_LANGUAGE_CODE,
+      targetLanguageCode: target,
     });
 
     const durationMs = Date.now() - started;

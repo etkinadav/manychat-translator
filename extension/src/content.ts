@@ -20,6 +20,8 @@
  *   - MutationObserver explicitly ignores our injected nodes
  */
 
+import { initOutgoing, rescanOutgoingComposer } from "./outgoing";
+
 const LOG_PREFIX = "[ManychatTranslator]";
 const log = (...args: unknown[]) => console.log(LOG_PREFIX, ...args);
 const warn = (...args: unknown[]) => console.warn(LOG_PREFIX, ...args);
@@ -349,6 +351,7 @@ function startObserver(): void {
 function handleUrlChange(newUrl: string): void {
   log(`URL change detected: ${lastUrl} -> ${newUrl}`);
   lastUrl = newUrl;
+  rescanOutgoingComposer();
   for (const delay of POST_NAVIGATION_RESCAN_DELAYS_MS) {
     window.setTimeout(() => {
       const count = scanAndQueue();
@@ -392,6 +395,7 @@ function boot(): void {
   scanAndQueue();
   startObserver();
   patchHistory();
+  initOutgoing();
   for (const delay of POST_NAVIGATION_RESCAN_DELAYS_MS) {
     window.setTimeout(() => scanAndQueue(), delay);
   }

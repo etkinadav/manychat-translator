@@ -43,15 +43,20 @@ router.post<
       .json({ error: "Every entry in `texts` must be a string." });
   }
 
+  const targetLanguage =
+    typeof body?.targetLanguage === "string" && body.targetLanguage.trim()
+      ? body.targetLanguage.trim()
+      : "en";
+
   const totalChars = texts.reduce((sum, t) => sum + t.length, 0);
   console.log(
-    `[translate] request received | count=${texts.length} | chars=${totalChars} | first=${JSON.stringify(
+    `[translate] request received | targetLanguage=${targetLanguage} | count=${texts.length} | chars=${totalChars} | first=${JSON.stringify(
       texts[0] ?? "",
     )}`,
   );
 
   try {
-    const translations = await translateTexts(texts);
+    const translations = await translateTexts(texts, targetLanguage);
     console.log(`[translate] response sent  | count=${translations.length}`);
     return res.json({ translations });
   } catch (err) {

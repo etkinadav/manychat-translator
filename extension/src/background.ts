@@ -14,6 +14,8 @@ const BG_REQUEST_TIMEOUT_MS = 8000;
 interface BgTranslateMessage {
   type: "translate";
   texts: string[];
+  /** "en" incoming chat (default), "he" outgoing composer */
+  targetLanguage?: string;
 }
 
 interface BgTranslateOk {
@@ -38,14 +40,20 @@ chrome.runtime.onMessage.addListener(
 
     void (async () => {
       try {
+        const targetLanguage = message.targetLanguage?.trim() || "en";
         console.log(
           "[ManychatTranslator:bg] backend request started | count=",
           message.texts.length,
+          "| targetLanguage=",
+          targetLanguage,
         );
         const res = await fetch(BACKEND_URL, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ texts: message.texts }),
+          body: JSON.stringify({
+            texts: message.texts,
+            targetLanguage,
+          }),
           signal: controller.signal,
         });
         if (!res.ok) {
