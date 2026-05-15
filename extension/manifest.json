@@ -3,7 +3,10 @@
   "name": "Manychat Translator (scaffold)",
   "version": "0.2.0",
   "description": "Detects Manychat chat messages, sends them to a local backend, and renders the response inline under each message.",
-  "permissions": [],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
   "host_permissions": [
     "https://app.manychat.com/*",
     "http://localhost:3000/*",

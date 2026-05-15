@@ -6,8 +6,9 @@
  *      [data-chat-message="block"] anchor.
  *   2. For each new message: inject a sibling translation block in
  *      LOADING state (showing a CSS spinner).
- *   3. Queue the original text. A short debounce later we POST the whole
- *      batch to http://localhost:3000/api/translate.
+ *   3. Queue the original text. A short debounce later we ask the MV3
+ *      service worker to POST the batch to http://localhost:3000/api/translate
+ *      (avoids page-origin CORS blocking direct fetch from this script).
  *   4. Map each response string back to its DOM placeholder, swap in the
  *      text, play a brief highlight animation, mark UPDATED.
  *   5. If the backend errors, swap the spinner for "translation failed"
@@ -37,8 +38,6 @@ const TEXT_NODE_SELECTORS = [
 const PROCESSED_ATTR = "data-ai-processed";
 const TRANSLATION_ATTR = "data-ai-translated";
 const TRANSLATION_CLASS = "mc-ai-translation";
-
-const BACKEND_URL = "http://localhost:3000/api/translate";
 
 const RESCAN_DEBOUNCE_MS = 150;
 const QUEUE_FLUSH_DEBOUNCE_MS = 80;
@@ -174,39 +173,35 @@ function scanAndQueue(root: ParentNode = document): number {
 // Backend client
 // ---------------------------------------------------------------------------
 
-interface TranslateResponse {
-  translations: string[];
+interface CsTranslateReply {
+  ok: boolean;
+  translations?: string[];
+  error?: string;
 }
 
-async function postTranslate(texts: string[]): Promise<string[]> {
-  const controller = new AbortController();
-  const timeout = window.setTimeout(
-    () => controller.abort(),
-    REQUEST_TIMEOUT_MS,
-  );
-  try {
-    const res = await fetch(BACKEND_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ texts }),
-      signal: controller.signal,
-    });
-    if (!res.ok) {
-      throw new Error(`backend returned HTTP ${res.status}`);
-    }
-    const data = (await res.json()) as TranslateResponse;
-    if (!Array.isArray(data.translations)) {
-      throw new Error("backend response missing `translations` array");
-    }
-    if (data.translations.length !== texts.length) {
-      throw new Error(
-        `backend returned ${data.translations.length} translations for ${texts.length} texts`,
-      );
-    }
-    return data.translations;
-  } finally {
-    window.clearTimeout(timeout);
-  }
+/** Ask the MV3 service worker to call the backend (no page-origin CORS). */
+function postTranslate(texts: string[]): Promise<string[]> {
+  return new Promise((resolve, reject) => {
+    const timeout = window.setTimeout(
+      () => reject(new Error("backend request timed out")),
+      REQUEST_TIMEOUT_MS,
+    );
+    chrome.runtime.sendMessage(
+      { type: "translate", texts },
+      (response: CsTranslateReply | undefined) => {
+        window.clearTimeout(timeout);
+        if (chrome.runtime.lastError) {
+          reject(new Error(chrome.runtime.lastError.message));
+          return;
+        }
+        if (!response?.ok || !response.translations) {
+          reject(new Error(response?.error ?? "backend request failed"));
+          return;
+        }
+        resolve(response.translations);
+      },
+    );
+  });
 }
 
 function scheduleFlush(): void {

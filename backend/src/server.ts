@@ -8,14 +8,15 @@ const app = express();
 
 /**
  * CORS policy:
- *  - Allow any Chrome extension origin (`chrome-extension://<id>`) since
- *    the extension ID is unstable while we develop unpacked.
- *  - Allow any localhost origin (any port) so we can test the API from
- *    curl / a browser tab during development.
- *  - Allow requests with no Origin header (e.g. curl, server-to-server).
+ *  - `chrome-extension://` — background service worker fetch (preferred).
+ *  - `https://app.manychat.com` — content-script fetch runs in the page
+ *    context, so the browser sends this Origin on preflight (see MV3 note).
+ *  - localhost — curl / local dev tabs.
+ *  - No Origin — curl, server-to-server.
  */
 const ALLOWED_ORIGIN_PREFIXES = [
   "chrome-extension://",
+  "https://app.manychat.com",
   "http://localhost",
   "http://127.0.0.1",
 ];
