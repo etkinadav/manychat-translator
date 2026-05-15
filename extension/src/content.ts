@@ -45,11 +45,15 @@ const TEXT_NODE_SELECTORS = [
 
 const PROCESSED_ATTR = "data-ai-processed";
 const TRANSLATION_ATTR = "data-ai-translated";
+const STATUS_ATTR = "data-ai-translation-status";
 const TRANSLATION_CLASS = "mc-ai-translation";
 
+type TranslationStatus = "queued" | "loading" | "done" | "error";
+
 const RESCAN_DEBOUNCE_MS = 150;
-const QUEUE_FLUSH_DEBOUNCE_MS = 80;
-const REQUEST_TIMEOUT_MS = 8000;
+/** 300–500ms per spec — coalesces page-load + mutation bursts into one HTTP. */
+const QUEUE_FLUSH_DEBOUNCE_MS = 400;
+const REQUEST_TIMEOUT_MS = 15000;
 const URL_POLL_INTERVAL_MS = 1000;
 const POST_NAVIGATION_RESCAN_DELAYS_MS = [200, 600, 1500];
 
@@ -153,6 +157,7 @@ function queueForTranslation(textEl: HTMLElement): boolean {
     textEl.insertAdjacentElement("afterend", placeholder);
   }
 
+  setStatus(placeholder, "queued");
   placeholder.classList.add("loading");
   placeholder.innerHTML = "";
   const spinner = document.createElement("div");
@@ -172,6 +177,10 @@ function queueForTranslation(textEl: HTMLElement): boolean {
   log(`message queued (queue size=${pendingQueue.length})`);
   scheduleFlush();
   return true;
+}
+
+function setStatus(placeholder: HTMLElement, status: TranslationStatus): void {
+  placeholder.setAttribute(STATUS_ATTR, status);
 }
 
 function scanAndQueue(root: ParentNode = document): number {
@@ -244,11 +253,20 @@ async function flushQueue(): Promise<void> {
   const batch = pendingQueue.splice(0, pendingQueue.length);
   const texts = batch.map((b) => b.text);
 
+  batch.forEach((item) => setStatus(item.placeholder, "loading"));
+
   log(`backend request started | size=${batch.length}`);
   try {
     const translations = await postTranslate(texts);
     log(`backend response received | size=${translations.length}`);
-    batch.forEach((item, i) => applyTranslation(item.placeholder, translations[i]!));
+    batch.forEach((item, i) => {
+      const translated = translations[i];
+      if (typeof translated === "string" && translated.length > 0) {
+        applyTranslation(item.placeholder, translated);
+      } else {
+        applyTranslation(item.placeholder, item.text);
+      }
+    });
     log(`DOM updated for ${batch.length} message(s)`);
   } catch (err) {
     warn("backend request failed:", err);
@@ -263,8 +281,7 @@ async function flushQueue(): Promise<void> {
 function applyTranslation(placeholder: HTMLElement, text: string): void {
   placeholder.classList.remove("loading", "error");
   placeholder.textContent = text;
-  // Force a reflow before adding `updated` so the CSS animation always
-  // restarts (even if the class was already present on a previous cycle).
+  setStatus(placeholder, "done");
   void placeholder.offsetWidth;
   placeholder.classList.add("updated");
 }
@@ -273,6 +290,7 @@ function applyError(placeholder: HTMLElement): void {
   placeholder.classList.remove("loading", "updated");
   placeholder.classList.add("error");
   placeholder.textContent = "translation failed";
+  setStatus(placeholder, "error");
 }
 
 // ---------------------------------------------------------------------------

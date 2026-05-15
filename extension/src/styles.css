@@ -25,7 +25,11 @@
   white-space: pre-wrap;
   word-break: break-word;
   overflow-wrap: anywhere;
-  unicode-bidi: plaintext;
+
+  /* Translated output is always English → force LTR. */
+  direction: ltr;
+  text-align: left;
+  unicode-bidi: isolate;
 
   max-width: 100%;
   box-sizing: border-box;
