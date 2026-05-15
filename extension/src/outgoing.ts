@@ -94,9 +94,67 @@ function scheduleButtonReset(
   window.setTimeout(() => setButtonState(btn, state), delayMs);
 }
 
-function notifyTextareaChanged(textarea: HTMLTextAreaElement): void {
-  textarea.dispatchEvent(new Event("input", { bubbles: true }));
+/**
+ * Manychat uses a React controlled textarea. Assigning `.value` alone is
+ * ignored on the next render. We must:
+ *   1. Set via the native prototype setter (bypasses React's wrapper)
+ *   2. Fire an `input` event React listens to
+ *   3. Optionally call the fiber `onChange` handler directly
+ */
+function setTextareaValue(
+  textarea: HTMLTextAreaElement,
+  value: string,
+): void {
+  const setter = Object.getOwnPropertyDescriptor(
+    HTMLTextAreaElement.prototype,
+    "value",
+  )?.set;
+  if (setter) {
+    setter.call(textarea, value);
+  } else {
+    textarea.value = value;
+  }
+
+  textarea.dispatchEvent(
+    new InputEvent("input", {
+      bubbles: true,
+      cancelable: true,
+      inputType: "insertText",
+      data: value,
+    }),
+  );
+
+  if (!invokeReactOnChange(textarea)) {
+    textarea.dispatchEvent(new Event("input", { bubbles: true }));
+  }
+
   textarea.dispatchEvent(new Event("change", { bubbles: true }));
+}
+
+/** Walk React fiber tree to find and call the textarea's onChange. */
+function invokeReactOnChange(textarea: HTMLTextAreaElement): boolean {
+  const keyed = textarea as HTMLTextAreaElement & Record<string, unknown>;
+  const fiberKey = Object.keys(keyed).find(
+    (k) =>
+      k.startsWith("__reactFiber$") || k.startsWith("__reactInternalInstance$"),
+  );
+  if (!fiberKey) return false;
+
+  type FiberNode = {
+    memoizedProps?: { onChange?: (e: { target: HTMLTextAreaElement }) => void };
+    return?: FiberNode;
+  };
+
+  let fiber = keyed[fiberKey] as FiberNode | undefined;
+  for (let depth = 0; depth < 12 && fiber; depth++) {
+    const onChange = fiber.memoizedProps?.onChange;
+    if (typeof onChange === "function") {
+      onChange({ target: textarea });
+      return true;
+    }
+    fiber = fiber.return;
+  }
+  return false;
 }
 
 function focusTextareaEnd(textarea: HTMLTextAreaElement): void {
@@ -129,14 +187,17 @@ function postTranslateOutgoing(text: string): Promise<string> {
   });
 }
 
-async function onTranslateClick(
-  btn: HTMLButtonElement,
-  textarea: HTMLTextAreaElement,
-): Promise<void> {
+async function onTranslateClick(btn: HTMLButtonElement): Promise<void> {
+  const textarea = findComposerTextarea();
+  if (!textarea) {
+    warn("textarea not found on click");
+    return;
+  }
+
   const original = textarea.value.trim();
   if (!original) return;
 
-  log("outgoing translation started");
+  log("outgoing translation started", { original: original.slice(0, 80) });
   setButtonState(btn, "loading");
 
   try {
@@ -148,11 +209,21 @@ async function onTranslateClick(
       return;
     }
 
-    textarea.value = translated;
-    notifyTextareaChanged(textarea);
-    focusTextareaEnd(textarea);
+    if (translated === original) {
+      warn(
+        "translation identical to input — Google may have detected Hebrew already; updating React state anyway",
+      );
+    }
 
-    log("outgoing translation completed");
+    // Re-query in case Manychat swapped the DOM node while we awaited the API.
+    const liveTextarea = findComposerTextarea() ?? textarea;
+    setTextareaValue(liveTextarea, translated);
+    focusTextareaEnd(liveTextarea);
+
+    log("outgoing translation completed", {
+      translated: translated.slice(0, 80),
+      domValue: liveTextarea.value.slice(0, 80),
+    });
     log("textarea updated");
     setButtonState(btn, "success");
     scheduleButtonReset(btn, "default", SUCCESS_RESET_MS);
@@ -167,15 +238,15 @@ function tryInjectComposerButton(): boolean {
   const textarea = findComposerTextarea();
   if (!textarea) return false;
 
-  let btn = findButtonForTextarea(textarea);
-  if (btn instanceof HTMLButtonElement) {
+  const existingBtn = findButtonForTextarea(textarea);
+  if (existingBtn instanceof HTMLButtonElement) {
     return false;
   }
 
   log("textarea detected");
-  btn = createTranslateButton();
+  const btn = createTranslateButton();
   btn.addEventListener("click", () => {
-    void onTranslateClick(btn as HTMLButtonElement, textarea);
+    void onTranslateClick(btn);
   });
   textarea.insertAdjacentElement("afterend", btn);
   log("translate button injected");
