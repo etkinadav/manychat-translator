@@ -1,0 +1,38 @@
+/*
+ * Styles for injected duplicate ("translation") blocks.
+ *
+ * Goals:
+ *  - Visually distinct so we can debug placement easily.
+ *  - Doesn't break Manychat's existing flex/grid layout (block-level, auto width).
+ *  - Preserves newlines from the original message via white-space: pre-wrap.
+ *  - RTL-friendly: lets the browser pick the direction based on content.
+ */
+
+.mc-ai-translation {
+  display: block;
+  margin-top: 4px;
+  padding: 4px 6px;
+  background: rgba(255, 255, 0, 0.15);
+  border-radius: 6px;
+  font-size: 0.9em;
+  line-height: 1.35;
+  color: inherit;
+
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+
+  /* Let the browser auto-detect direction (Hebrew vs Latin) per block. */
+  unicode-bidi: plaintext;
+
+  /* Make sure Manychat's parent flex container doesn't squash us. */
+  max-width: 100%;
+  box-sizing: border-box;
+  pointer-events: auto;
+}
+
+/* Tiny placeholder marker we can use later when the translation is loading. */
+.mc-ai-translation[data-ai-status="pending"] {
+  opacity: 0.6;
+  font-style: italic;
+}

@@ -1,0 +1,18 @@
+{
+  "name": "manychat-translator",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Chrome extension (MV3) that detects Manychat chat messages and duplicates them inline. Future-ready scaffold for an AI translation layer.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite build --watch --mode development",
+    "build": "tsc --noEmit && vite build",
+    "clean": "rimraf dist"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.268",
+    "rimraf": "^5.0.5",
+    "typescript": "^5.4.5",
+    "vite": "^5.2.11"
+  }
+}

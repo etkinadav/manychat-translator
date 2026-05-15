@@ -1,0 +1,19 @@
+{
+  "manifest_version": 3,
+  "name": "Manychat Translator (scaffold)",
+  "version": "0.1.0",
+  "description": "Detects Manychat chat messages and duplicates them inline. Scaffold for a future AI translation layer.",
+  "permissions": [],
+  "host_permissions": [
+    "https://app.manychat.com/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["https://app.manychat.com/*"],
+      "js": ["content.js"],
+      "css": ["styles.css"],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ]
+}
