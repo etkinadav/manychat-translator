@@ -144,12 +144,55 @@
 }
 
 /* ──────────────────────────────────────────────────────────────────────── */
-/* Outgoing composer — "Translate to Hebrew" button                        */
+/* Outgoing composer — gender selector + Translate to Hebrew               */
 /* ──────────────────────────────────────────────────────────────────────── */
 
-.mc-translate-to-hebrew-btn {
-  display: block;
+.mc-outgoing-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
   margin-top: 6px;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.mc-gender-selector {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.85);
+  font-size: 11px;
+  line-height: 1.2;
+}
+
+.mc-gender-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin: 0;
+  padding: 3px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.mc-gender-option:has(input:checked) {
+  background: rgba(60, 120, 200, 0.15);
+  font-weight: 600;
+}
+
+.mc-gender-option input {
+  margin: 0;
+  cursor: pointer;
+}
+
+.mc-translate-to-hebrew-btn {
+  display: inline-block;
+  margin-top: 0;
   padding: 4px 10px;
   font-size: 12px;
   line-height: 1.3;

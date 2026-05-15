@@ -16,6 +16,8 @@ interface BgTranslateMessage {
   texts: string[];
   /** "en" incoming chat (default), "he" outgoing composer */
   targetLanguage?: string;
+  /** Strip gender-prompt headers from Google response (outgoing only) */
+  stripInstructionPrefix?: boolean;
 }
 
 interface BgTranslateOk {
@@ -53,6 +55,7 @@ chrome.runtime.onMessage.addListener(
           body: JSON.stringify({
             texts: message.texts,
             targetLanguage,
+            stripInstructionPrefix: message.stripInstructionPrefix === true,
           }),
           signal: controller.signal,
         });

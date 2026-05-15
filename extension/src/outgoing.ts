@@ -1,11 +1,9 @@
 /**
- * Outgoing composer translation — English → Hebrew.
+ * Outgoing composer translation — English → Hebrew (gender-aware).
  *
- * Injects a "Translate to Hebrew" button next to the Manychat reply
- * textarea. On click, sends the draft to the backend (targetLanguage: "he")
- * and writes the result back into the textarea with React-friendly events.
- *
- * Separate from incoming message translation (Hebrew → English).
+ * Injects a compact toolbar (gender selector + Translate button) next to
+ * the Manychat reply textarea. Builds an instruction prompt for Google
+ * Translate; the backend strips echoed instruction headers from the result.
  */
 
 const LOG_PREFIX = "[ManychatTranslator:outgoing]";
@@ -14,8 +12,12 @@ const warn = (...args: unknown[]) => console.warn(LOG_PREFIX, ...args);
 
 const TEXTAREA_SELECTOR =
   'textarea[name="whatsappMessageInput"][data-mc-editor="true"]';
+const TOOLBAR_ATTR = "data-mc-outgoing-toolbar";
 const BUTTON_ATTR = "data-mc-translate-to-hebrew";
 const BUTTON_CLASS = "mc-translate-to-hebrew-btn";
+const GENDER_INPUT_NAME = "mc-speaker-gender";
+
+type SpeakerGender = "female" | "male";
 
 const LABEL_DEFAULT = "Translate to Hebrew";
 const LABEL_LOADING = "Translating...";
@@ -27,6 +29,9 @@ const POST_NAVIGATION_DELAYS_MS = [200, 600, 1500];
 const REQUEST_TIMEOUT_MS = 15000;
 const ERROR_RESET_MS = 2000;
 const SUCCESS_RESET_MS = 2000;
+
+/** Persisted while the page is open; restored when toolbar is re-injected. */
+let selectedGender: SpeakerGender = "female";
 
 interface CsTranslateReply {
   ok: boolean;
@@ -41,15 +46,33 @@ function findComposerTextarea(): HTMLTextAreaElement | null {
   return document.querySelector<HTMLTextAreaElement>(TEXTAREA_SELECTOR);
 }
 
-function findButtonForTextarea(textarea: HTMLTextAreaElement): HTMLElement | null {
+function findToolbarForTextarea(textarea: HTMLTextAreaElement): HTMLElement | null {
   const next = textarea.nextElementSibling;
-  if (
-    next instanceof HTMLElement &&
-    next.hasAttribute(BUTTON_ATTR)
-  ) {
+  if (next instanceof HTMLElement && next.hasAttribute(TOOLBAR_ATTR)) {
     return next;
   }
-  return document.querySelector<HTMLElement>(`[${BUTTON_ATTR}="true"]`);
+  return document.querySelector<HTMLElement>(`[${TOOLBAR_ATTR}="true"]`);
+}
+
+function buildTranslationPrompt(userText: string, gender: SpeakerGender): string {
+  const speakerLine =
+    gender === "female"
+      ? "The speaker is female:"
+      : "The speaker is male:";
+  return `Translate to Hebrew. ${speakerLine}\n${userText}`;
+}
+
+function readGenderFromToolbar(toolbar: HTMLElement): SpeakerGender {
+  const checked = toolbar.querySelector<HTMLInputElement>(
+    `input[name="${GENDER_INPUT_NAME}"]:checked`,
+  );
+  return checked?.value === "male" ? "male" : "female";
+}
+
+function getSelectedGender(): SpeakerGender {
+  const toolbar = document.querySelector<HTMLElement>(`[${TOOLBAR_ATTR}="true"]`);
+  if (toolbar) return readGenderFromToolbar(toolbar);
+  return selectedGender;
 }
 
 function createTranslateButton(): HTMLButtonElement {
@@ -59,6 +82,46 @@ function createTranslateButton(): HTMLButtonElement {
   btn.setAttribute(BUTTON_ATTR, "true");
   btn.textContent = LABEL_DEFAULT;
   return btn;
+}
+
+function createOutgoingToolbar(): HTMLDivElement {
+  const toolbar = document.createElement("div");
+  toolbar.className = "mc-outgoing-toolbar";
+  toolbar.setAttribute(TOOLBAR_ATTR, "true");
+
+  const genderWrap = document.createElement("div");
+  genderWrap.className = "mc-gender-selector";
+  genderWrap.setAttribute("role", "group");
+  genderWrap.setAttribute("aria-label", "Speaker gender");
+
+  for (const { value, label } of [
+    { value: "female" as const, label: "Female" },
+    { value: "male" as const, label: "Male" },
+  ]) {
+    const labelEl = document.createElement("label");
+    labelEl.className = "mc-gender-option";
+    const input = document.createElement("input");
+    input.type = "radio";
+    input.name = GENDER_INPUT_NAME;
+    input.value = value;
+    input.checked = selectedGender === value;
+    input.addEventListener("change", () => {
+      if (input.checked) {
+        selectedGender = value;
+        log("selected gender:", selectedGender);
+      }
+    });
+    labelEl.append(input, document.createTextNode(` ${label}`));
+    genderWrap.appendChild(labelEl);
+  }
+
+  const btn = createTranslateButton();
+  btn.addEventListener("click", () => {
+    void onTranslateClick(btn);
+  });
+
+  toolbar.append(genderWrap, btn);
+  return toolbar;
 }
 
 function setButtonState(
@@ -94,13 +157,6 @@ function scheduleButtonReset(
   window.setTimeout(() => setButtonState(btn, state), delayMs);
 }
 
-/**
- * Manychat uses a React controlled textarea. Assigning `.value` alone is
- * ignored on the next render. We must:
- *   1. Set via the native prototype setter (bypasses React's wrapper)
- *   2. Fire an `input` event React listens to
- *   3. Optionally call the fiber `onChange` handler directly
- */
 function setTextareaValue(
   textarea: HTMLTextAreaElement,
   value: string,
@@ -131,7 +187,6 @@ function setTextareaValue(
   textarea.dispatchEvent(new Event("change", { bubbles: true }));
 }
 
-/** Walk React fiber tree to find and call the textarea's onChange. */
 function invokeReactOnChange(textarea: HTMLTextAreaElement): boolean {
   const keyed = textarea as HTMLTextAreaElement & Record<string, unknown>;
   const fiberKey = Object.keys(keyed).find(
@@ -163,14 +218,19 @@ function focusTextareaEnd(textarea: HTMLTextAreaElement): void {
   textarea.setSelectionRange(len, len);
 }
 
-function postTranslateOutgoing(text: string): Promise<string> {
+function postTranslateOutgoing(promptText: string): Promise<string> {
   return new Promise((resolve, reject) => {
     const timeout = window.setTimeout(
       () => reject(new Error("backend request timed out")),
       REQUEST_TIMEOUT_MS,
     );
     chrome.runtime.sendMessage(
-      { type: "translate", texts: [text], targetLanguage: "he" },
+      {
+        type: "translate",
+        texts: [promptText],
+        targetLanguage: "he",
+        stripInstructionPrefix: true,
+      },
       (response: CsTranslateReply | undefined) => {
         window.clearTimeout(timeout);
         if (chrome.runtime.lastError) {
@@ -194,14 +254,22 @@ async function onTranslateClick(btn: HTMLButtonElement): Promise<void> {
     return;
   }
 
-  const original = textarea.value.trim();
-  if (!original) return;
+  const userText = textarea.value.trim();
+  if (!userText) return;
 
-  log("outgoing translation started", { original: original.slice(0, 80) });
+  const gender = getSelectedGender();
+  const prompt = buildTranslationPrompt(userText, gender);
+
+  log("outgoing translation started", { gender, userText: userText.slice(0, 60) });
+  log("prompt built", { prompt: prompt.slice(0, 120) });
   setButtonState(btn, "loading");
 
   try {
-    const translated = (await postTranslateOutgoing(original)).trim();
+    const translated = (await postTranslateOutgoing(prompt)).trim();
+    log("backend response received", {
+      translated: translated.slice(0, 80),
+    });
+
     if (!translated) {
       warn("outgoing translation returned empty — keeping original");
       setButtonState(btn, "error");
@@ -209,21 +277,11 @@ async function onTranslateClick(btn: HTMLButtonElement): Promise<void> {
       return;
     }
 
-    if (translated === original) {
-      warn(
-        "translation identical to input — Google may have detected Hebrew already; updating React state anyway",
-      );
-    }
-
-    // Re-query in case Manychat swapped the DOM node while we awaited the API.
     const liveTextarea = findComposerTextarea() ?? textarea;
     setTextareaValue(liveTextarea, translated);
     focusTextareaEnd(liveTextarea);
 
-    log("outgoing translation completed", {
-      translated: translated.slice(0, 80),
-      domValue: liveTextarea.value.slice(0, 80),
-    });
+    log("outgoing translation completed");
     log("textarea updated");
     setButtonState(btn, "success");
     scheduleButtonReset(btn, "default", SUCCESS_RESET_MS);
@@ -234,41 +292,34 @@ async function onTranslateClick(btn: HTMLButtonElement): Promise<void> {
   }
 }
 
-function tryInjectComposerButton(): boolean {
+function tryInjectComposerToolbar(): boolean {
   const textarea = findComposerTextarea();
   if (!textarea) return false;
 
-  const existingBtn = findButtonForTextarea(textarea);
-  if (existingBtn instanceof HTMLButtonElement) {
-    return false;
-  }
+  if (findToolbarForTextarea(textarea)) return false;
 
   log("textarea detected");
-  const btn = createTranslateButton();
-  btn.addEventListener("click", () => {
-    void onTranslateClick(btn);
-  });
-  textarea.insertAdjacentElement("afterend", btn);
-  log("translate button injected");
+  const toolbar = createOutgoingToolbar();
+  textarea.insertAdjacentElement("afterend", toolbar);
+  log("translate button injected (with gender selector)");
   return true;
 }
 
 function isRelevantOutgoingMutation(mutation: MutationRecord): boolean {
   const target = mutation.target as Element | null;
-  if (target?.matches?.(BUTTON_CLASS) || target?.closest?.(`.${BUTTON_CLASS}`)) {
+  if (
+    target?.closest?.(`.${BUTTON_CLASS}, .mc-outgoing-toolbar, .mc-gender-selector`)
+  ) {
     return false;
   }
   if (mutation.type === "childList") {
     for (const node of Array.from(mutation.addedNodes)) {
       if (!(node instanceof Element)) continue;
-      if (node.matches?.(BUTTON_CLASS) || node.querySelector?.(BUTTON_CLASS)) {
-        continue;
-      }
       if (
-        node.matches?.(TEXTAREA_SELECTOR) ||
-        node.querySelector?.(TEXTAREA_SELECTOR)
+        node.matches?.(`.${BUTTON_CLASS}, .mc-outgoing-toolbar`) ||
+        node.querySelector?.(`.${BUTTON_CLASS}, .mc-outgoing-toolbar`)
       ) {
-        return true;
+        continue;
       }
       return true;
     }
@@ -281,8 +332,8 @@ function scheduleOutgoingRescan(reason: string): void {
   if (rescanTimer !== null) window.clearTimeout(rescanTimer);
   rescanTimer = window.setTimeout(() => {
     rescanTimer = null;
-    if (tryInjectComposerButton()) {
-      log(`composer button injected (${reason})`);
+    if (tryInjectComposerToolbar()) {
+      log(`composer toolbar injected (${reason})`);
     }
   }, OUTGOING_RESCAN_DEBOUNCE_MS);
 }
@@ -300,19 +351,17 @@ function startOutgoingObserver(): void {
   outgoingObserver.observe(document.body, { childList: true, subtree: true });
 }
 
-/** Call once from content script boot. */
 export function initOutgoing(): void {
-  tryInjectComposerButton();
+  tryInjectComposerToolbar();
   startOutgoingObserver();
   for (const delay of POST_NAVIGATION_DELAYS_MS) {
-    window.setTimeout(() => tryInjectComposerButton(), delay);
+    window.setTimeout(() => tryInjectComposerToolbar(), delay);
   }
 }
 
-/** Call when SPA conversation URL changes (from content script). */
 export function rescanOutgoingComposer(): void {
-  tryInjectComposerButton();
+  tryInjectComposerToolbar();
   for (const delay of POST_NAVIGATION_DELAYS_MS) {
-    window.setTimeout(() => tryInjectComposerButton(), delay);
+    window.setTimeout(() => tryInjectComposerToolbar(), delay);
   }
 }

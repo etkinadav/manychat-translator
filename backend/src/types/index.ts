@@ -10,6 +10,12 @@ export interface TranslateRequest {
    * Outgoing composer: "he" (English → Hebrew).
    */
   targetLanguage?: string;
+  /**
+   * When true, each translation is passed through outgoing prompt cleanup
+   * (strip translated "Translate to Hebrew / speaker is …" headers).
+   * Used only by the outgoing composer flow — never for incoming chat.
+   */
+  stripInstructionPrefix?: boolean;
 }
 
 export interface TranslateResponse {

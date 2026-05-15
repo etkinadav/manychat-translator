@@ -5,6 +5,7 @@ import type {
   TranslateResponse,
 } from "../types";
 import { translateTexts } from "../services/googleTranslate.service";
+import { cleanOutgoingTranslation } from "../services/outgoingPromptCleanup.service";
 
 const router = Router();
 
@@ -48,15 +49,23 @@ router.post<
       ? body.targetLanguage.trim()
       : "en";
 
+  const stripInstructionPrefix = body?.stripInstructionPrefix === true;
+
   const totalChars = texts.reduce((sum, t) => sum + t.length, 0);
   console.log(
-    `[translate] request received | targetLanguage=${targetLanguage} | count=${texts.length} | chars=${totalChars} | first=${JSON.stringify(
+    `[translate] request received | targetLanguage=${targetLanguage} | stripInstructionPrefix=${stripInstructionPrefix} | count=${texts.length} | chars=${totalChars} | first=${JSON.stringify(
       texts[0] ?? "",
     )}`,
   );
 
   try {
-    const translations = await translateTexts(texts, targetLanguage);
+    let translations = await translateTexts(texts, targetLanguage);
+    if (stripInstructionPrefix) {
+      translations = translations.map((raw) => cleanOutgoingTranslation(raw));
+      console.log(
+        `[translate] prompt cleaning applied to ${translations.length} result(s)`,
+      );
+    }
     console.log(`[translate] response sent  | count=${translations.length}`);
     return res.json({ translations });
   } catch (err) {
