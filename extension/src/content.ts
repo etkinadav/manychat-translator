@@ -30,6 +30,14 @@ const warn = (...args: unknown[]) => console.warn(LOG_PREFIX, ...args);
 
 const MESSAGE_BLOCK_SELECTOR = '[data-chat-message="block"]';
 
+/**
+ * Blocks that are NOT user/agent chat messages — automation triggers, field
+ * settings, system events, etc. Matched on stable patterns (not full hashes
+ * like `_meta_10kfu_124`).
+ */
+const SKIP_BLOCK_SELECTOR =
+  '[class*="_meta_"], [data-chat-message="meta"], [data-chat-message="system"], [class*="_system_"]';
+
 const TEXT_NODE_SELECTORS = [
   '[data-chat-message="text"]',
   '[class*="_text_"]',
@@ -96,6 +104,19 @@ function hasMeaningfulText(el: Element): boolean {
   return (el.textContent ?? "").trim().length > 0;
 }
 
+/** Automation / system / meta rows — not real chat bubbles. */
+function isSkippableMessageBlock(block: Element): boolean {
+  return block.matches(SKIP_BLOCK_SELECTOR);
+}
+
+/** Remove wrongly injected duplicates from a skipped block (e.g. before fix). */
+function cleanupSkippedBlock(block: Element): void {
+  block.querySelectorAll(`.${TRANSLATION_CLASS}`).forEach((el) => el.remove());
+  block
+    .querySelectorAll(`[${PROCESSED_ATTR}]`)
+    .forEach((el) => el.removeAttribute(PROCESSED_ATTR));
+}
+
 // ---------------------------------------------------------------------------
 // Placeholder injection
 // ---------------------------------------------------------------------------
@@ -158,13 +179,19 @@ function scanAndQueue(root: ParentNode = document): number {
   if (blocks.length === 0) return 0;
 
   let queued = 0;
+  let skipped = 0;
   for (const block of Array.from(blocks)) {
+    if (isSkippableMessageBlock(block)) {
+      cleanupSkippedBlock(block);
+      skipped++;
+      continue;
+    }
     const textEl = findTextElementInBlock(block);
     if (!textEl) continue;
     if (queueForTranslation(textEl)) queued++;
   }
-  if (queued > 0) {
-    log(`scan: ${blocks.length} blocks, ${queued} newly queued`);
+  if (queued > 0 || skipped > 0) {
+    log(`scan: ${blocks.length} blocks, ${queued} queued, ${skipped} skipped (meta/system)`);
   }
   return queued;
 }
