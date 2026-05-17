@@ -82,14 +82,26 @@ export function isGeminiOutgoingDryRunEnabled(): boolean {
   return flag === "true" || flag === "1";
 }
 
-/** Same metadata + prompt console output used before calling Gemini. */
-export function logGeminiOutgoingPromptDetails(
-  payload: GeminiOutgoingPromptPayload,
-): void {
+/** Metadata + full prompt body (shared by live and dry-run logs). */
+function logGeminiOutgoingPromptBody(payload: GeminiOutgoingPromptPayload): void {
   const divider = "=".repeat(72);
   console.log("[gemini-outgoing] metadata:", JSON.stringify(payload.metadata, null, 2));
   console.log(`${divider}\nPROMPT:\n${divider}`);
   console.log(payload.prompt);
+}
+
+/**
+ * Full prompt log before a live Gemini call — same layout as the original dry-run log.
+ */
+export function logGeminiOutgoingPromptDetails(
+  payload: GeminiOutgoingPromptPayload,
+): void {
+  const divider = "=".repeat(72);
+  console.log(`\n${divider}`);
+  console.log("[gemini-outgoing] sending prompt to Gemini (Vertex AI)");
+  console.log(divider);
+  logGeminiOutgoingPromptBody(payload);
+  console.log(`${divider}\n[gemini-outgoing] END PROMPT\n`);
 }
 
 export function logGeminiOutgoingDryRun(payload: GeminiOutgoingPromptPayload): void {
@@ -97,6 +109,6 @@ export function logGeminiOutgoingDryRun(payload: GeminiOutgoingPromptPayload): v
   console.log(`\n${divider}`);
   console.log("[gemini-outgoing] DRY RUN — request NOT sent to Gemini API");
   console.log(divider);
-  logGeminiOutgoingPromptDetails(payload);
+  logGeminiOutgoingPromptBody(payload);
   console.log(`${divider}\n[gemini-outgoing] END DRY RUN\n`);
 }
