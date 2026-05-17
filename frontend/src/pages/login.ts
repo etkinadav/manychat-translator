@@ -8,7 +8,7 @@ export function renderLogin(root: HTMLElement, onSuccess: () => void): void {
       <p class="error" id="login-error" hidden></p>
       <form id="login-form">
         <div class="field">
-          <label for="username">שם משתמש</label>
+          <label for="username">שם משתמש או אימייל</label>
           <input id="username" name="username" type="text" autocomplete="username" required />
         </div>
         <div class="field">
