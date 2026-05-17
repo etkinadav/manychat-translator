@@ -225,7 +225,12 @@ function postTranslate(texts: string[]): Promise<string[]> {
       REQUEST_TIMEOUT_MS,
     );
     chrome.runtime.sendMessage(
-      { type: "translate", texts },
+      {
+        type: "translate",
+        texts,
+        targetLanguage: "en",
+        sourceLanguage: "he",
+      },
       (response: CsTranslateReply | undefined) => {
         window.clearTimeout(timeout);
         if (chrome.runtime.lastError) {

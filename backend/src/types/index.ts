@@ -5,11 +5,15 @@
 export interface TranslateRequest {
   texts: string[];
   /**
-   * BCP-47 language code for the translation target.
-   * Incoming chat: omit or "en" (Hebrew → English).
-   * Outgoing composer: "he" (English → Hebrew).
+   * BCP-47 target language (default from server: `en`).
+   * Incoming chat: `"en"`. Outgoing composer: `"he"`.
    */
   targetLanguage?: string;
+  /**
+   * Optional source language (e.g. `"he"`). Omit for Google auto-detect.
+   * Server default may be set via `TRANSLATE_SOURCE_LANGUAGE` in `.env`.
+   */
+  sourceLanguage?: string;
   /**
    * When true, each translation is passed through outgoing prompt cleanup
    * (strip translated "Translate to Hebrew / speaker is …" headers).

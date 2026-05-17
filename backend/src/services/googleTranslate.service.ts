@@ -23,7 +23,14 @@ import { v3 } from "@google-cloud/translate";
 
 const { TranslationServiceClient } = v3;
 
-const DEFAULT_TARGET_LANGUAGE = "en";
+function envTargetLanguage(): string {
+  return process.env.TRANSLATE_TARGET_LANGUAGE?.trim() || "en";
+}
+
+function envSourceLanguage(): string | undefined {
+  const v = process.env.TRANSLATE_SOURCE_LANGUAGE?.trim();
+  return v || undefined;
+}
 const LOCATION = "global";
 
 const translationClient = new TranslationServiceClient();
@@ -48,6 +55,11 @@ export function ensureProjectIdResolved(): Promise<void> {
       cachedProjectId = fromEnv;
       projectIdSource = "env";
       console.log(`[gtranslate] projectId source: env`);
+      if (fromEnv === "your-gcp-project-id") {
+        console.warn(
+          "[gtranslate] GOOGLE_CLOUD_PROJECT is still the placeholder — set your real GCP project ID in backend/.env",
+        );
+      }
     } else {
       console.log(
         `[gtranslate] projectId source: ADC (resolving via metadata)…`,
@@ -68,6 +80,44 @@ export function ensureProjectIdResolved(): Promise<void> {
   return projectIdReadyPromise;
 }
 
+function errorBlob(err: unknown): string {
+  const parts: string[] = [];
+  if (err instanceof Error) {
+    parts.push(err.message);
+    const details = (err as { details?: string }).details;
+    if (typeof details === "string") parts.push(details);
+  } else {
+    parts.push(String(err));
+  }
+  return parts.join(" ").toLowerCase();
+}
+
+/** Auth / ADC failures — do not return originals as if translated. */
+export function isTranslationAuthError(err: unknown): boolean {
+  const blob = errorBlob(err);
+  return (
+    blob.includes("invalid_grant") ||
+    blob.includes("invalid_rapt") ||
+    blob.includes("unauthenticated") ||
+    blob.includes("could not load the default credentials")
+  );
+}
+
+/** Bad project id / API config — same handling as auth (fail loudly). */
+export function isTranslationConfigError(err: unknown): boolean {
+  const blob = errorBlob(err);
+  return (
+    blob.includes("invalid 'parent'") ||
+    blob.includes("could not be found") ||
+    blob.includes("not_found") ||
+    blob.includes("failed to get project number")
+  );
+}
+
+export function isTranslationFatalError(err: unknown): boolean {
+  return isTranslationAuthError(err) || isTranslationConfigError(err);
+}
+
 /**
  * Translate a batch of strings into `targetLanguageCode` (default `"en"`).
  *
@@ -81,7 +131,8 @@ export function ensureProjectIdResolved(): Promise<void> {
  */
 export async function translateTexts(
   texts: string[],
-  targetLanguageCode: string = DEFAULT_TARGET_LANGUAGE,
+  targetLanguageCode: string = envTargetLanguage(),
+  sourceLanguageCode?: string,
 ): Promise<string[]> {
   if (texts.length === 0) return [];
 
@@ -99,10 +150,18 @@ export async function translateTexts(
     return [...texts];
   }
 
-  const target = targetLanguageCode.trim() || DEFAULT_TARGET_LANGUAGE;
+  if (cachedProjectId === "your-gcp-project-id") {
+    throw new Error(
+      "GOOGLE_CLOUD_PROJECT is still the placeholder your-gcp-project-id — set a real GCP project ID in backend/.env",
+    );
+  }
+
+  const target = targetLanguageCode.trim() || envTargetLanguage();
+  const source =
+    sourceLanguageCode?.trim() || envSourceLanguage();
   const totalChars = texts.reduce((sum, t) => sum + t.length, 0);
   console.log(
-    `[gtranslate] translate -> ${target} | texts=${texts.length} | chars=${totalChars} | projectIdSource=${projectIdSource}`,
+    `[gtranslate] translate ${source ? `${source} -> ` : ""}${target} | texts=${texts.length} | chars=${totalChars} | projectIdSource=${projectIdSource}`,
   );
 
   const started = Date.now();
@@ -112,6 +171,7 @@ export async function translateTexts(
       contents: texts,
       mimeType: "text/plain",
       targetLanguageCode: target,
+      ...(source ? { sourceLanguageCode: source } : {}),
     });
 
     const durationMs = Date.now() - started;
@@ -129,6 +189,13 @@ export async function translateTexts(
     });
   } catch (err) {
     const durationMs = Date.now() - started;
+    if (isTranslationFatalError(err)) {
+      console.error(
+        `[gtranslate] translateText failed (fatal) after ${durationMs}ms:`,
+        err,
+      );
+      throw err;
+    }
     console.error(
       `[gtranslate] translateText failed after ${durationMs}ms — falling back to originals:`,
       err,

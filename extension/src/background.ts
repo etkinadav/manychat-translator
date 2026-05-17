@@ -16,6 +16,8 @@ interface BgTranslateMessage {
   texts: string[];
   /** "en" incoming chat (default), "he" outgoing composer */
   targetLanguage?: string;
+  /** e.g. "he" for Hebrew inbox → English */
+  sourceLanguage?: string;
   /** Strip gender-prompt headers from Google response (outgoing only) */
   stripInstructionPrefix?: boolean;
 }
@@ -43,9 +45,12 @@ chrome.runtime.onMessage.addListener(
     void (async () => {
       try {
         const targetLanguage = message.targetLanguage?.trim() || "en";
+        const sourceLanguage = message.sourceLanguage?.trim();
         console.log(
           "[ManychatTranslator:bg] backend request started | count=",
           message.texts.length,
+          "| sourceLanguage=",
+          sourceLanguage || "auto",
           "| targetLanguage=",
           targetLanguage,
         );
@@ -55,6 +60,7 @@ chrome.runtime.onMessage.addListener(
           body: JSON.stringify({
             texts: message.texts,
             targetLanguage,
+            ...(sourceLanguage ? { sourceLanguage } : {}),
             stripInstructionPrefix: message.stripInstructionPrefix === true,
           }),
           signal: controller.signal,

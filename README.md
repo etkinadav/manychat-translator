@@ -12,7 +12,8 @@ change on the backend.
 ```
 manychat-translator/
 ├── extension/   # MV3 Chrome extension (TypeScript + Vite)
-└── backend/    # Node + Express + TypeScript echo service
+├── frontend/    # Web UI — login + configuration (Vite)
+└── backend/     # Node + Express + TypeScript API
 ```
 
 ---
@@ -22,14 +23,50 @@ manychat-translator/
 ```bash
 cd backend
 npm install
-npm run dev          # ts-node-dev, restarts on save
+cp .env.example .env   # fill MONGO_URI + JWT_KEY (same as beams)
+npm run dev            # ts-node-dev, restarts on save
 ```
 
 You should see:
 
 ```
-[server] backend started on http://localhost:3000  (POST /api/translate)
+[db] connected to MongoDB
+[server] backend started on http://localhost:3000
 ```
+
+Auth uses the same MongoDB `users` collection and password hashing as **beams**
+(`POST /api/user/login` with `{ "username", "password" }` — username or email).
+
+## Run the web frontend
+
+**Option A — same port as backend (recommended, fewer issues):**
+
+```bash
+cd frontend
+npm install
+npm run build
+cd ../backend
+npm run dev
+```
+
+Open **http://localhost:3000/** in a normal Chrome tab (not Cursor’s embedded preview).
+
+**Option B — Vite dev server with hot reload:**
+
+```bash
+cd frontend
+npm run dev          # http://localhost:5173 — proxies /api to :3000
+```
+
+- `/` — login (username + password, **Log in** button).
+- `/config` — configuration page (empty placeholder after login).
+
+### `chrome-error://chromewebdata` / “Unsafe attempt to load localhost:5173”
+
+This usually means one of:
+
+1. **Frontend dev server is not running** — you opened `:5173` but only started `backend` or `extension`. Use option A above, or run `npm run dev` inside `frontend/`.
+2. **Opened inside an iframe** (e.g. Cursor Simple Browser) — open the URL in a regular Chrome window instead.
 
 Quick sanity check from another terminal:
 
