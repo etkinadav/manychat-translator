@@ -1,4 +1,5 @@
 import { languageLabel } from "../constants/languages";
+import type { CustomerGender } from "./customerGender";
 
 export interface GeminiOutgoingPromptInput {
   messageText: string;
@@ -7,6 +8,7 @@ export interface GeminiOutgoingPromptInput {
   organizationName: string;
   organizationContext: string;
   agentGender: "" | "male" | "female";
+  customerGender: CustomerGender;
 }
 
 export interface GeminiOutgoingPromptPayload {
@@ -17,14 +19,13 @@ export interface GeminiOutgoingPromptPayload {
     targetLanguageCode: string;
     organizationName: string;
     agentGender: string;
+    customerGender: string;
     messageCharCount: number;
   };
 }
 
-function formatAgentGender(gender: "" | "male" | "female"): string {
-  if (gender === "male") return "male";
-  if (gender === "female") return "female";
-  return "not specified (use neutral professional tone)";
+function resolveAgentGender(gender: "" | "male" | "female"): "male" | "female" {
+  return gender === "female" ? "female" : "male";
 }
 
 /**
@@ -36,34 +37,25 @@ export function buildGeminiOutgoingPrompt(
 ): GeminiOutgoingPromptPayload {
   const sourceLabel = languageLabel(input.sourceLanguageCode);
   const targetLabel = languageLabel(input.targetLanguageCode);
-  const genderText = formatAgentGender(input.agentGender);
-  const orgContext = input.organizationContext.trim() || "(none provided)";
-  const orgName = input.organizationName.trim() || "Organization";
+  const agentGender = resolveAgentGender(input.agentGender);
+  const customerGender = input.customerGender;
+  const orgContext = input.organizationContext.trim();
+  const orgName = input.organizationName.trim() || "the company";
+  const message = input.messageText.trim();
 
-  const prompt = `You are a professional translation assistant for a customer support agent who replies to customers via Manychat.
+  const contextBlock = orgContext
+    ? `\nCompany context: ${orgContext}`
+    : "";
 
-=== ORGANIZATION ===
-Name: ${orgName}
+  const prompt = `I am a ${agentGender} customer support agent at ${orgName}. I am writing to a ${customerGender} customer. Translate my reply from ${sourceLabel} (${input.sourceLanguageCode}) to ${targetLabel} (${input.targetLanguageCode}). Use correct grammar for the customer's gender and a natural tone for our brand.${contextBlock}
 
-Organization context (tone, terminology, domain, style guidelines):
-${orgContext}
-
-=== AGENT (the person writing the outgoing message) ===
-- Writes in: ${sourceLabel} (language code: ${input.sourceLanguageCode})
-- Gender (for grammatical tone in the target language): ${genderText}
-
-=== TRANSLATION TASK ===
-Translate the agent's outgoing reply from ${sourceLabel} (${input.sourceLanguageCode}) to ${targetLabel} (${input.targetLanguageCode}).
-Apply the organization context above for tone, terminology, and style.
-The translated text will be sent directly to a customer — it must read naturally in ${targetLabel}.
+Message to translate:
+${message}
 
 === OUTPUT RULES ===
 - Return ONLY the translated message text.
 - Do not add explanations, quotes, labels, or markdown.
-- Do not include phrases like "Here is the translation" or repeat the instructions.
-
-=== MESSAGE TO TRANSLATE ===
-${input.messageText.trim()}`;
+- Do not include phrases like "Here is the translation" or repeat the instructions.`;
 
   return {
     prompt,
@@ -71,8 +63,9 @@ ${input.messageText.trim()}`;
       sourceLanguageCode: input.sourceLanguageCode,
       targetLanguageCode: input.targetLanguageCode,
       organizationName: orgName,
-      agentGender: genderText,
-      messageCharCount: input.messageText.trim().length,
+      agentGender,
+      customerGender,
+      messageCharCount: message.length,
     },
   };
 }

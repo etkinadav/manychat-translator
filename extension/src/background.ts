@@ -24,6 +24,7 @@ interface BgTranslateMessage {
   type: "translate";
   texts: string[];
   outgoing?: boolean;
+  customerGender?: "male" | "female";
 }
 
 interface BgLoginMessage {
@@ -142,7 +143,12 @@ async function handleTranslate(
       headers,
       body: JSON.stringify({
         texts: message.texts,
-        ...(message.outgoing ? { outgoing: true } : {}),
+        ...(message.outgoing
+          ? {
+              outgoing: true,
+              customerGender: message.customerGender ?? "male",
+            }
+          : {}),
       }),
       signal: controller.signal,
     });
@@ -197,16 +203,31 @@ async function handleTranslate(
       };
     }
 
-    console.log(
-      "[ManychatTranslator:bg] translate ok |",
-      message.outgoing ? "outgoing" : "incoming",
-      "|",
-      session.organization.language,
-      "<->",
-      session.language,
-    );
+    if (message.outgoing && data.geminiPrompt) {
+      console.log(
+        "[ManychatTranslator:bg] Gemini prompt sent (also in backend terminal):",
+      );
+      console.log(
+        "[ManychatTranslator:bg] ========== GEMINI PROMPT ==========\n",
+        data.geminiPrompt,
+        "\n[ManychatTranslator:bg] ========== END PROMPT ==========",
+      );
+    } else {
+      console.log(
+        "[ManychatTranslator:bg] translate ok |",
+        message.outgoing ? "outgoing" : "incoming",
+        "|",
+        session.organization.language,
+        "<->",
+        session.language,
+      );
+    }
 
-    return { ok: true, translations: data.translations };
+    return {
+      ok: true,
+      translations: data.translations,
+      geminiPrompt: data.geminiPrompt,
+    };
   } catch (err) {
     const error = err instanceof Error ? err.message : String(err);
     return { ok: false, error };

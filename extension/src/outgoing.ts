@@ -3,6 +3,11 @@
  */
 
 import { translateToButtonLabel } from "./constants/languages";
+import {
+  readCustomerGender,
+  writeCustomerGender,
+  type CustomerGender,
+} from "./customer-gender";
 import { fetchSession } from "./session-client";
 import type { ExtensionSession } from "./types";
 
@@ -14,6 +19,7 @@ const TEXTAREA_SELECTOR =
   'textarea[name="whatsappMessageInput"][data-mc-editor="true"]';
 const TOOLBAR_ATTR = "data-mc-outgoing-toolbar";
 const BUTTON_ATTR = "data-mc-translate-outgoing";
+const GENDER_ATTR = "data-mc-customer-gender";
 const BUTTON_CLASS = "mc-translate-to-hebrew-btn";
 
 const LABEL_LOADING = "Translating...";
@@ -36,7 +42,6 @@ interface CsTranslateReply {
   translations?: string[];
   error?: string;
   dryRun?: boolean;
-  dryRunNote?: string;
   geminiPrompt?: string;
 }
 
@@ -82,6 +87,41 @@ function createTranslateButton(): HTMLButtonElement {
   return btn;
 }
 
+function readCustomerGenderFromToolbar(
+  toolbar: HTMLElement,
+): CustomerGender {
+  const selected = toolbar.querySelector<HTMLInputElement>(
+    `input[name="${GENDER_ATTR}"]:checked`,
+  );
+  return selected?.value === "female" ? "female" : "male";
+}
+
+function createCustomerGenderSelector(
+  initial: CustomerGender,
+): HTMLDivElement {
+  const wrap = document.createElement("div");
+  wrap.className = "mc-gender-selector";
+  wrap.title = "Customer gender (for translation tone)";
+
+  const makeOption = (value: CustomerGender, label: string): HTMLLabelElement => {
+    const labelEl = document.createElement("label");
+    labelEl.className = "mc-gender-option";
+    const input = document.createElement("input");
+    input.type = "radio";
+    input.name = GENDER_ATTR;
+    input.value = value;
+    input.checked = initial === value;
+    input.addEventListener("change", () => {
+      if (input.checked) void writeCustomerGender(value);
+    });
+    labelEl.append(input, document.createTextNode(` ${label}`));
+    return labelEl;
+  };
+
+  wrap.append(makeOption("male", "Male"), makeOption("female", "Female"));
+  return wrap;
+}
+
 function createOutgoingToolbar(): HTMLDivElement {
   const toolbar = document.createElement("div");
   toolbar.className = "mc-outgoing-toolbar";
@@ -90,6 +130,10 @@ function createOutgoingToolbar(): HTMLDivElement {
   const btn = createTranslateButton();
   btn.addEventListener("click", () => {
     void onTranslateClick(btn);
+  });
+
+  void readCustomerGender().then((gender) => {
+    toolbar.prepend(createCustomerGenderSelector(gender));
   });
 
   toolbar.append(btn);
@@ -187,7 +231,27 @@ function focusTextareaEnd(textarea: HTMLTextAreaElement): void {
   textarea.setSelectionRange(len, len);
 }
 
-function postTranslateOutgoing(userText: string): Promise<string> {
+function logGeminiPromptInPage(prompt: string): void {
+  console.log(
+    "%c[ManychatTranslator] GEMINI PROMPT",
+    "font-weight:bold;color:#2563eb",
+  );
+  console.log(prompt);
+  console.log(
+    "[ManychatTranslator] Same prompt logged in backend terminal (npm run dev)",
+  );
+}
+
+interface OutgoingTranslateResult {
+  translation: string;
+  geminiPrompt?: string;
+  dryRun?: boolean;
+}
+
+function postTranslateOutgoing(
+  userText: string,
+  customerGender: CustomerGender,
+): Promise<OutgoingTranslateResult> {
   return new Promise((resolve, reject) => {
     const timeout = window.setTimeout(
       () => reject(new Error("backend request timed out")),
@@ -198,6 +262,7 @@ function postTranslateOutgoing(userText: string): Promise<string> {
         type: "translate",
         texts: [userText],
         outgoing: true,
+        customerGender,
       },
       (response: CsTranslateReply | undefined) => {
         window.clearTimeout(timeout);
@@ -210,18 +275,21 @@ function postTranslateOutgoing(userText: string): Promise<string> {
           return;
         }
         if (response.dryRun) {
-          resolve(JSON.stringify({
+          resolve({
+            translation: response.translations?.[0] ?? userText,
+            geminiPrompt: response.geminiPrompt,
             dryRun: true,
-            note: response.dryRunNote,
-            prompt: response.geminiPrompt,
-          }));
+          });
           return;
         }
         if (!response.translations?.[0]) {
           reject(new Error("backend request failed"));
           return;
         }
-        resolve(response.translations[0]);
+        resolve({
+          translation: response.translations[0],
+          geminiPrompt: response.geminiPrompt,
+        });
       },
     );
   });
@@ -244,50 +312,46 @@ async function onTranslateClick(btn: HTMLButtonElement): Promise<void> {
   const userText = textarea.value.trim();
   if (!userText) return;
 
+  const toolbar = btn.closest<HTMLElement>(`[${TOOLBAR_ATTR}]`);
+  const customerGender = toolbar
+    ? readCustomerGenderFromToolbar(toolbar)
+    : await readCustomerGender();
+
   setButtonState(btn, "loading");
   log("outgoing translate requested (Gemini path)", {
     chars: userText.length,
     userLanguage: session.language,
     orgLanguage: session.organization.language,
-    gender: session.gender || "female",
+    agentGender: session.gender || "male",
+    customerGender,
   });
 
   try {
-    const result = (await postTranslateOutgoing(userText)).trim();
-    if (result.startsWith("{") && result.includes('"dryRun"')) {
-      try {
-        const dry = JSON.parse(result) as {
-          dryRun?: boolean;
-          note?: string;
-          prompt?: string;
-        };
-        if (dry.dryRun && dry.prompt) {
-          console.log(
-            "%c[ManychatTranslator] GEMINI PROMPT (dry-run)",
-            "font-weight:bold;color:#2563eb",
-          );
-          console.log(dry.prompt);
-          console.log(
-            "[ManychatTranslator] Also logged in backend terminal where you run: cd backend && npm run dev",
-          );
-        }
-      } catch {
-        /* ignore parse */
-      }
+    const { translation, geminiPrompt, dryRun } = await postTranslateOutgoing(
+      userText,
+      customerGender,
+    );
+
+    if (geminiPrompt) {
+      logGeminiPromptInPage(geminiPrompt);
+    }
+
+    if (dryRun) {
       btn.textContent = LABEL_DRY_RUN;
       btn.classList.add("success");
       scheduleButtonReset(btn, "default", SUCCESS_RESET_MS * 2);
       return;
     }
 
-    if (!result) {
+    const translated = translation.trim();
+    if (!translated) {
       setButtonState(btn, "error");
       scheduleButtonReset(btn, "default", ERROR_RESET_MS);
       return;
     }
 
     const liveTextarea = findComposerTextarea() ?? textarea;
-    setTextareaValue(liveTextarea, result);
+    setTextareaValue(liveTextarea, translated);
     focusTextareaEnd(liveTextarea);
     setButtonState(btn, "success");
     scheduleButtonReset(btn, "default", SUCCESS_RESET_MS);

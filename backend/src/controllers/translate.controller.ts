@@ -11,6 +11,7 @@ import {
   isTranslationFatalError,
   translateTexts,
 } from "../services/googleTranslate.service";
+import { parseCustomerGender } from "../services/customerGender";
 import { isGeminiOutgoingDryRunEnabled } from "../services/geminiOutgoingPrompt.service";
 import {
   runGeminiOutgoingDryRun,
@@ -76,8 +77,15 @@ export async function translateBatch(
         return;
       }
 
+      const customerGender = parseCustomerGender(body?.customerGender);
+
       if (isGeminiOutgoingDryRunEnabled()) {
-        const dryRunResult = runGeminiOutgoingDryRun(user, org, messageText);
+        const dryRunResult = runGeminiOutgoingDryRun(
+          user,
+          org,
+          messageText,
+          customerGender,
+        );
         res.status(200).json({
           translations: dryRunResult.translations,
           dryRun: true,
@@ -88,15 +96,19 @@ export async function translateBatch(
       }
 
       console.log(
-        `[translate] outgoing | user=${String(user._id)} org=${String(org._id)} | Gemini | chars=${messageText.length}`,
+        `[translate] outgoing | user=${String(user._id)} org=${String(org._id)} | Gemini | customer=${customerGender} | chars=${messageText.length}`,
       );
 
       const geminiResult = await runGeminiOutgoingTranslate(
         user,
         org,
         messageText,
+        customerGender,
       );
-      res.status(200).json({ translations: geminiResult.translations });
+      res.status(200).json({
+        translations: geminiResult.translations,
+        geminiPrompt: geminiResult.geminiPrompt,
+      });
       return;
     }
 
