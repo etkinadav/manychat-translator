@@ -79,8 +79,17 @@ ${input.messageText.trim()}`;
 
 export function isGeminiOutgoingDryRunEnabled(): boolean {
   const flag = process.env.GEMINI_OUTGOING_DRY_RUN?.trim().toLowerCase();
-  if (flag === "false" || flag === "0") return false;
-  return true;
+  return flag === "true" || flag === "1";
+}
+
+/** Same metadata + prompt console output used before calling Gemini. */
+export function logGeminiOutgoingPromptDetails(
+  payload: GeminiOutgoingPromptPayload,
+): void {
+  const divider = "=".repeat(72);
+  console.log("[gemini-outgoing] metadata:", JSON.stringify(payload.metadata, null, 2));
+  console.log(`${divider}\nPROMPT:\n${divider}`);
+  console.log(payload.prompt);
 }
 
 export function logGeminiOutgoingDryRun(payload: GeminiOutgoingPromptPayload): void {
@@ -88,8 +97,6 @@ export function logGeminiOutgoingDryRun(payload: GeminiOutgoingPromptPayload): v
   console.log(`\n${divider}`);
   console.log("[gemini-outgoing] DRY RUN — request NOT sent to Gemini API");
   console.log(divider);
-  console.log("[gemini-outgoing] metadata:", JSON.stringify(payload.metadata, null, 2));
-  console.log(`${divider}\nPROMPT:\n${divider}`);
-  console.log(payload.prompt);
+  logGeminiOutgoingPromptDetails(payload);
   console.log(`${divider}\n[gemini-outgoing] END DRY RUN\n`);
 }

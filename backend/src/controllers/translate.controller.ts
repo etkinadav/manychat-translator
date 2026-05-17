@@ -11,14 +11,18 @@ import {
   isTranslationFatalError,
   translateTexts,
 } from "../services/googleTranslate.service";
-import { runGeminiOutgoingDryRun } from "../services/geminiOutgoingTranslate.service";
+import { isGeminiOutgoingDryRunEnabled } from "../services/geminiOutgoingPrompt.service";
+import {
+  runGeminiOutgoingDryRun,
+  runGeminiOutgoingTranslate,
+} from "../services/geminiOutgoingTranslate.service";
 import { resolveLanguagePairFromProfile } from "../services/translateLanguagePair";
 import { resolveOrganizationField } from "./organization.helpers";
 
 /**
  * POST /api/translate — requires JWT; languages from user + organization.
  * Incoming chat → Google Translate.
- * Outgoing composer → Gemini (dry-run logs prompt until GEMINI_OUTGOING_DRY_RUN=false).
+ * Outgoing composer → Vertex AI Gemini (optional dry-run via GEMINI_OUTGOING_DRY_RUN=true).
  */
 export async function translateBatch(
   req: AuthRequest,
@@ -72,13 +76,27 @@ export async function translateBatch(
         return;
       }
 
-      const dryRunResult = runGeminiOutgoingDryRun(user, org, messageText);
-      res.status(200).json({
-        translations: dryRunResult.translations,
-        dryRun: true,
-        dryRunNote: dryRunResult.dryRunNote,
-        geminiPrompt: dryRunResult.promptPreview.prompt,
-      });
+      if (isGeminiOutgoingDryRunEnabled()) {
+        const dryRunResult = runGeminiOutgoingDryRun(user, org, messageText);
+        res.status(200).json({
+          translations: dryRunResult.translations,
+          dryRun: true,
+          dryRunNote: dryRunResult.dryRunNote,
+          geminiPrompt: dryRunResult.promptPreview.prompt,
+        });
+        return;
+      }
+
+      console.log(
+        `[translate] outgoing | user=${String(user._id)} org=${String(org._id)} | Gemini | chars=${messageText.length}`,
+      );
+
+      const geminiResult = await runGeminiOutgoingTranslate(
+        user,
+        org,
+        messageText,
+      );
+      res.status(200).json({ translations: geminiResult.translations });
       return;
     }
 
