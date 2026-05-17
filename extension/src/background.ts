@@ -24,7 +24,6 @@ interface BgTranslateMessage {
   type: "translate";
   texts: string[];
   outgoing?: boolean;
-  stripInstructionPrefix?: boolean;
 }
 
 interface BgLoginMessage {
@@ -120,7 +119,10 @@ async function handleLogin(
 
 async function handleTranslate(
   message: BgTranslateMessage,
-): Promise<{ ok: true; translations: string[] } | { ok: false; error: string }> {
+): Promise<
+  | { ok: true; translations: string[]; dryRun?: boolean; dryRunNote?: string; geminiPrompt?: string }
+  | { ok: false; error: string }
+> {
   const session = await getSession(false);
   if (!session.organization) {
     return {
@@ -141,7 +143,6 @@ async function handleTranslate(
       body: JSON.stringify({
         texts: message.texts,
         ...(message.outgoing ? { outgoing: true } : {}),
-        stripInstructionPrefix: message.stripInstructionPrefix === true,
       }),
       signal: controller.signal,
     });
@@ -150,6 +151,9 @@ async function handleTranslate(
       translations?: string[];
       error?: string;
       message?: string;
+      dryRun?: boolean;
+      dryRunNote?: string;
+      geminiPrompt?: string;
     };
 
     if (res.status === 401) {
@@ -160,6 +164,27 @@ async function handleTranslate(
       return {
         ok: false,
         error: data.error ?? data.message ?? `Backend HTTP ${res.status}`,
+      };
+    }
+    if (data.dryRun) {
+      console.log(
+        "[ManychatTranslator:bg] Gemini dry-run — prompt also logged in backend terminal (npm run dev)",
+      );
+      if (data.geminiPrompt) {
+        console.log(
+          "[ManychatTranslator:bg] ========== GEMINI PROMPT ==========\n",
+          data.geminiPrompt,
+          "\n[ManychatTranslator:bg] ========== END PROMPT ==========",
+        );
+      }
+      return {
+        ok: true,
+        translations: data.translations ?? message.texts,
+        dryRun: true,
+        dryRunNote:
+          data.dryRunNote ??
+          "Gemini dry-run: see prompt in this console and in the backend terminal.",
+        geminiPrompt: data.geminiPrompt,
       };
     }
     if (!Array.isArray(data.translations)) {

@@ -19,6 +19,7 @@ const BUTTON_CLASS = "mc-translate-to-hebrew-btn";
 const LABEL_LOADING = "Translating...";
 const LABEL_SUCCESS = "Translated ✓";
 const LABEL_ERROR = "Translation failed";
+const LABEL_DRY_RUN = "Dry run — see console";
 const LABEL_SIGN_IN = "Sign in (extension popup)";
 
 const OUTGOING_RESCAN_DEBOUNCE_MS = 150;
@@ -34,6 +35,9 @@ interface CsTranslateReply {
   ok: boolean;
   translations?: string[];
   error?: string;
+  dryRun?: boolean;
+  dryRunNote?: string;
+  geminiPrompt?: string;
 }
 
 let rescanTimer: number | null = null;
@@ -67,21 +71,6 @@ function findToolbarForTextarea(textarea: HTMLTextAreaElement): HTMLElement | nu
     return next;
   }
   return document.querySelector<HTMLElement>(`[${TOOLBAR_ATTR}="true"]`);
-}
-
-function buildTranslationPrompt(
-  userText: string,
-  gender: "" | "male" | "female",
-  targetLanguage: string,
-): string {
-  const targetLabel = targetLanguage.toUpperCase();
-  const speakerLine =
-    gender === "male"
-      ? "The speaker is male:"
-      : gender === "female"
-        ? "The speaker is female:"
-        : "The speaker:";
-  return `Translate to ${targetLabel}. ${speakerLine}\n${userText}`;
 }
 
 function createTranslateButton(): HTMLButtonElement {
@@ -198,7 +187,7 @@ function focusTextareaEnd(textarea: HTMLTextAreaElement): void {
   textarea.setSelectionRange(len, len);
 }
 
-function postTranslateOutgoing(promptText: string): Promise<string> {
+function postTranslateOutgoing(userText: string): Promise<string> {
   return new Promise((resolve, reject) => {
     const timeout = window.setTimeout(
       () => reject(new Error("backend request timed out")),
@@ -207,9 +196,8 @@ function postTranslateOutgoing(promptText: string): Promise<string> {
     chrome.runtime.sendMessage(
       {
         type: "translate",
-        texts: [promptText],
+        texts: [userText],
         outgoing: true,
-        stripInstructionPrefix: true,
       },
       (response: CsTranslateReply | undefined) => {
         window.clearTimeout(timeout);
@@ -217,8 +205,20 @@ function postTranslateOutgoing(promptText: string): Promise<string> {
           reject(new Error(chrome.runtime.lastError.message));
           return;
         }
-        if (!response?.ok || !response.translations?.[0]) {
+        if (!response?.ok) {
           reject(new Error(response?.error ?? "backend request failed"));
+          return;
+        }
+        if (response.dryRun) {
+          resolve(JSON.stringify({
+            dryRun: true,
+            note: response.dryRunNote,
+            prompt: response.geminiPrompt,
+          }));
+          return;
+        }
+        if (!response.translations?.[0]) {
+          reject(new Error("backend request failed"));
           return;
         }
         resolve(response.translations[0]);
@@ -244,25 +244,50 @@ async function onTranslateClick(btn: HTMLButtonElement): Promise<void> {
   const userText = textarea.value.trim();
   if (!userText) return;
 
-  const gender = session.gender === "male" ? "male" : "female";
-  const prompt = buildTranslationPrompt(
-    userText,
-    gender,
-    session.organization.language,
-  );
-
   setButtonState(btn, "loading");
+  log("outgoing translate requested (Gemini path)", {
+    chars: userText.length,
+    userLanguage: session.language,
+    orgLanguage: session.organization.language,
+    gender: session.gender || "female",
+  });
 
   try {
-    const translated = (await postTranslateOutgoing(prompt)).trim();
-    if (!translated) {
+    const result = (await postTranslateOutgoing(userText)).trim();
+    if (result.startsWith("{") && result.includes('"dryRun"')) {
+      try {
+        const dry = JSON.parse(result) as {
+          dryRun?: boolean;
+          note?: string;
+          prompt?: string;
+        };
+        if (dry.dryRun && dry.prompt) {
+          console.log(
+            "%c[ManychatTranslator] GEMINI PROMPT (dry-run)",
+            "font-weight:bold;color:#2563eb",
+          );
+          console.log(dry.prompt);
+          console.log(
+            "[ManychatTranslator] Also logged in backend terminal where you run: cd backend && npm run dev",
+          );
+        }
+      } catch {
+        /* ignore parse */
+      }
+      btn.textContent = LABEL_DRY_RUN;
+      btn.classList.add("success");
+      scheduleButtonReset(btn, "default", SUCCESS_RESET_MS * 2);
+      return;
+    }
+
+    if (!result) {
       setButtonState(btn, "error");
       scheduleButtonReset(btn, "default", ERROR_RESET_MS);
       return;
     }
 
     const liveTextarea = findComposerTextarea() ?? textarea;
-    setTextareaValue(liveTextarea, translated);
+    setTextareaValue(liveTextarea, result);
     focusTextareaEnd(liveTextarea);
     setButtonState(btn, "success");
     scheduleButtonReset(btn, "default", SUCCESS_RESET_MS);

@@ -11,12 +11,14 @@ import {
   isTranslationFatalError,
   translateTexts,
 } from "../services/googleTranslate.service";
-import { cleanOutgoingTranslation } from "../services/outgoingPromptCleanup.service";
+import { runGeminiOutgoingDryRun } from "../services/geminiOutgoingTranslate.service";
 import { resolveLanguagePairFromProfile } from "../services/translateLanguagePair";
 import { resolveOrganizationField } from "./organization.helpers";
 
 /**
  * POST /api/translate — requires JWT; languages from user + organization.
+ * Incoming chat → Google Translate.
+ * Outgoing composer → Gemini (dry-run logs prompt until GEMINI_OUTGOING_DRY_RUN=false).
  */
 export async function translateBatch(
   req: AuthRequest,
@@ -56,28 +58,47 @@ export async function translateBatch(
       return;
     }
 
+    if (body?.outgoing === true) {
+      if (texts.length !== 1) {
+        res.status(400).json({
+          error: "Outgoing translation supports exactly one message at a time.",
+        });
+        return;
+      }
+
+      const messageText = texts[0] ?? "";
+      if (!messageText.trim()) {
+        res.status(400).json({ error: "Message text is empty." });
+        return;
+      }
+
+      const dryRunResult = runGeminiOutgoingDryRun(user, org, messageText);
+      res.status(200).json({
+        translations: dryRunResult.translations,
+        dryRun: true,
+        dryRunNote: dryRunResult.dryRunNote,
+        geminiPrompt: dryRunResult.promptPreview.prompt,
+      });
+      return;
+    }
+
     const { source: sourceLanguage, target: targetLanguage } =
       resolveLanguagePairFromProfile({
         userLanguage: user.language || "en",
         orgLanguage: org.language,
-        outgoing: body?.outgoing === true,
+        outgoing: false,
       });
-
-    const stripInstructionPrefix = body?.stripInstructionPrefix === true;
 
     const totalChars = texts.reduce((sum, t) => sum + t.length, 0);
     console.log(
-      `[translate] user=${String(user._id)} org=${String(org._id)} | outgoing=${body?.outgoing === true} | ${sourceLanguage} -> ${targetLanguage} | count=${texts.length} | chars=${totalChars}`,
+      `[translate] incoming | user=${String(user._id)} org=${String(org._id)} | ${sourceLanguage} -> ${targetLanguage} | count=${texts.length} | chars=${totalChars}`,
     );
 
-    let translations = await translateTexts(
+    const translations = await translateTexts(
       texts,
       targetLanguage,
       sourceLanguage,
     );
-    if (stripInstructionPrefix) {
-      translations = translations.map((raw) => cleanOutgoingTranslation(raw));
-    }
     res.json({ translations });
   } catch (err) {
     if (isTranslationFatalError(err)) {
