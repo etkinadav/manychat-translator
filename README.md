@@ -12,7 +12,7 @@ change on the backend.
 ```
 manychat-translator/
 ├── extension/   # MV3 Chrome extension (TypeScript + Vite)
-├── frontend/    # Web UI — login + configuration (Vite)
+├── frontend/    # Web UI — login + configuration (Angular 16)
 └── backend/     # Node + Express + TypeScript API
 ```
 
@@ -51,15 +51,37 @@ npm run dev
 
 Open **http://localhost:3000/** in a normal Chrome tab (not Cursor’s embedded preview).
 
-**Option B — Vite dev server with hot reload:**
+**Option B — Angular dev server with hot reload:**
 
 ```bash
+cd backend
+npm run dev          # must be running on :3000
+
 cd frontend
-npm run dev          # http://localhost:5173 — proxies /api to :3000
+npm start            # http://localhost:5173 — proxies /api to :3000
 ```
 
 - `/` — login (username + password, **Log in** button).
-- `/config` — configuration page (empty placeholder after login).
+- `/config` — profile + organization settings.
+- `/config/organization` — create or edit an organization (`?edit=<id>`).
+
+### Frontend structure (same pattern as beams)
+
+```
+frontend/src/app/
+├── app.module.ts
+├── app-routing.module.ts
+├── auth/              # AuthService, AuthGuard, interceptor
+├── services/          # ProfileService, OrganizationsService
+├── models/
+├── constants/
+└── other-pages/
+    ├── login/         # login.component.ts | .html | .scss
+    ├── config/
+    └── organization-form/
+```
+
+Global styles: `frontend/src/styles.scss`. Per-page styles in each component’s `.scss`.
 
 ### `chrome-error://chromewebdata` / “Unsafe attempt to load localhost:5173”
 

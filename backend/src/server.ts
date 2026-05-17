@@ -6,6 +6,7 @@ import express from "express";
 import cors from "cors";
 import translateRouter from "./routes/translate";
 import userRouter from "./routes/user";
+import organizationsRouter from "./routes/organizations";
 import { connectMongo } from "./db/mongoose";
 import { ensureProjectIdResolved } from "./services/googleTranslate.service";
 
@@ -46,7 +47,7 @@ app.use(
       console.warn(`[cors] rejected origin: ${origin}`);
       return callback(new Error(`Origin not allowed by CORS: ${origin}`));
     },
-    methods: ["GET", "POST", "OPTIONS"],
+    methods: ["GET", "POST", "PATCH", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
     maxAge: 86400,
   }),
@@ -60,6 +61,7 @@ app.get("/health", (_req, res) => {
 
 app.use("/api/translate", translateRouter);
 app.use("/api/user", userRouter);
+app.use("/api/organizations", organizationsRouter);
 
 /** Built frontend (`frontend/dist`) — open http://localhost:3000/ for login UI */
 function resolveFrontendDist(): string | null {

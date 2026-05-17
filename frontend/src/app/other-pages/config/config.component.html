@@ -1,0 +1,160 @@
+<div class="config-shell">
+  <div class="config-header">
+    <h1>Configuration</h1>
+    <button type="button" class="btn-secondary" (click)="logout()">Log out</button>
+  </div>
+
+  <p class="error" *ngIf="errorMessage">{{ errorMessage }}</p>
+  <p class="status-msg" *ngIf="statusMessage">{{ statusMessage }}</p>
+
+  <div class="config-card" *ngIf="isLoading">
+    <p class="muted">Loading profile…</p>
+  </div>
+
+  <div class="config-card" *ngIf="!isLoading && profile">
+    <section class="config-section">
+      <h2>Your profile</h2>
+      <div class="field">
+        <label for="profile-email">Email</label>
+        <input
+          id="profile-email"
+          type="email"
+          [value]="profile.email"
+          readonly
+        />
+        <p class="field-hint">Cannot be changed here.</p>
+      </div>
+      <div class="field">
+        <label for="profile-language">Your language</label>
+        <select id="profile-language" [(ngModel)]="profileLanguage">
+          <option *ngFor="let opt of languageOptions" [value]="opt.value">
+            {{ opt.label }}
+          </option>
+        </select>
+        <p class="field-hint">Language you write in (translate from).</p>
+      </div>
+      <div class="field">
+        <span class="label-block">Gender</span>
+        <div class="gender-row">
+          <label>
+            <input
+              type="radio"
+              name="gender"
+              value="female"
+              [(ngModel)]="profileGender"
+            />
+            Female
+          </label>
+          <label>
+            <input
+              type="radio"
+              name="gender"
+              value="male"
+              [(ngModel)]="profileGender"
+            />
+            Male
+          </label>
+        </div>
+        <p class="field-hint">Used for outgoing message tone in the extension.</p>
+      </div>
+      <button type="button" (click)="saveProfile()">Save profile</button>
+    </section>
+
+    <section class="config-section" *ngIf="profile.organization as org">
+      <h2>Organization</h2>
+      <p class="connected-badge">
+        Connected — translate to
+        <strong>{{ org.language | uppercase }}</strong>
+      </p>
+      <div class="field">
+        <label>Translation context</label>
+        <textarea
+          readonly
+          rows="4"
+          class="readonly-area"
+          [value]="org.translationContext"
+        ></textarea>
+        <p class="field-hint">Provided by the organization (read-only).</p>
+      </div>
+      <div class="btn-row">
+        <button type="button" class="btn-secondary" (click)="goToOrganizationForm(org.id)">
+          Edit organization
+        </button>
+        <button type="button" class="btn-secondary" (click)="goToOrganizationForm()">
+          Create organization
+        </button>
+        <button type="button" class="btn-danger" (click)="disconnectOrganization()">
+          Disconnect
+        </button>
+      </div>
+    </section>
+
+    <section class="config-section" *ngIf="!profile.organization">
+      <h2>Organization</h2>
+      <p class="field-hint">
+        Connect to an organization to set the target language and translation context.
+      </p>
+      <div class="btn-row">
+        <button type="button" (click)="openPicker()">Choose organization</button>
+        <button type="button" class="btn-secondary" (click)="goToOrganizationForm()">
+          Create organization
+        </button>
+      </div>
+    </section>
+
+    <section class="config-section org-picker" *ngIf="pickerStep === 'list'">
+      <h2>Choose organization</h2>
+      <p class="field-hint">Select an organization, then enter its password.</p>
+      <p class="muted" *ngIf="orgList.length === 0">No organizations available.</p>
+      <div class="org-list" *ngIf="orgList.length > 0">
+        <label class="org-option" *ngFor="let org of orgList">
+          <input
+            type="radio"
+            name="org-pick"
+            [value]="org.id"
+            [(ngModel)]="selectedOrgId"
+          />
+          <span>
+            <strong>{{ org.language | uppercase }}</strong>
+            <span class="muted org-preview">{{
+              org.translationContextPreview || "No context"
+            }}</span>
+          </span>
+        </label>
+      </div>
+      <div class="btn-row">
+        <button type="button" class="btn-secondary" (click)="cancelPicker()">
+          Cancel
+        </button>
+        <button
+          type="button"
+          (click)="pickerContinue()"
+          [disabled]="orgList.length === 0"
+        >
+          Continue
+        </button>
+      </div>
+    </section>
+
+    <section class="config-section org-picker" *ngIf="pickerStep === 'password'">
+      <h2>Organization password</h2>
+      <p class="field-hint">
+        Connecting to
+        <strong>{{ selectedOrg?.language | uppercase }}</strong>
+      </p>
+      <div class="field">
+        <label for="org-password">Password</label>
+        <input
+          id="org-password"
+          type="password"
+          autocomplete="current-password"
+          [(ngModel)]="connectPassword"
+        />
+      </div>
+      <div class="btn-row">
+        <button type="button" class="btn-secondary" (click)="pickerBack()">Back</button>
+        <button type="button" (click)="connectOrganization()">Connect</button>
+      </div>
+    </section>
+  </div>
+</div>

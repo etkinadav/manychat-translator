@@ -1,0 +1,19 @@
+.card {
+  width: 100%;
+  max-width: 400px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 28px;
+  box-shadow: 0 8px 24px rgba(26, 31, 54, 0.08);
+}
+
+.subtitle {
+  margin: 0 0 24px;
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+button {
+  width: 100%;
+}

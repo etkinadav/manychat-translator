@@ -1,0 +1,64 @@
+<div class="config-shell">
+  <div class="config-header">
+    <h1>{{ isEdit ? "Edit organization" : "Create organization" }}</h1>
+    <button type="button" class="btn-secondary" (click)="back()">
+      Back to configuration
+    </button>
+  </div>
+
+  <p class="error" *ngIf="errorMessage">{{ errorMessage }}</p>
+  <p class="status-msg" *ngIf="statusMessage">{{ statusMessage }}</p>
+
+  <div class="config-card" *ngIf="isLoading">
+    <p class="muted">Loading…</p>
+  </div>
+
+  <div class="config-card" *ngIf="!isLoading">
+    <form (ngSubmit)="onSubmit()">
+      <section class="config-section">
+        <h2>{{ isEdit ? "Organization details" : "New organization" }}</h2>
+        <div class="field">
+          <label for="org-language">Organization language</label>
+          <select id="org-language" name="language" required [(ngModel)]="language">
+            <option *ngFor="let opt of languageOptions" [value]="opt.value">
+              {{ opt.label }}
+            </option>
+          </select>
+          <p class="field-hint">Target language for incoming chat translations.</p>
+        </div>
+        <div class="field">
+          <label for="org-context">Translation context</label>
+          <textarea
+            id="org-context"
+            name="translationContext"
+            rows="5"
+            required
+            [(ngModel)]="translationContext"
+          ></textarea>
+          <p class="field-hint">Instructions or tone used when translating messages.</p>
+        </div>
+        <div class="field">
+          <label for="org-password">Organization password</label>
+          <input
+            id="org-password"
+            name="password"
+            type="password"
+            autocomplete="new-password"
+            [required]="!isEdit"
+            [(ngModel)]="password"
+          />
+          <p class="field-hint" *ngIf="isEdit">
+            Leave blank to keep the current password. Required when connecting to
+            this organization.
+          </p>
+          <p class="field-hint" *ngIf="!isEdit">
+            Agents must enter this password to connect to the organization.
+          </p>
+        </div>
+        <button type="submit">
+          {{ isEdit ? "Save changes" : "Create organization" }}
+        </button>
+      </section>
+    </form>
+  </div>
+</div>

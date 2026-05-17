@@ -1,8 +1,6 @@
-import { startRouter } from "./router";
+import { platformBrowserDynamic } from "@angular/platform-browser-dynamic";
+import { AppModule } from "./app/app.module";
 
-const app = document.querySelector<HTMLElement>("#app");
-if (!app) {
-  throw new Error("#app element not found");
-}
-
-startRouter(app);
+platformBrowserDynamic()
+  .bootstrapModule(AppModule)
+  .catch((err) => console.error(err));

@@ -1,0 +1,30 @@
+<div class="card">
+  <h1>Sign in</h1>
+  <p class="subtitle">Manychat Translator</p>
+  <p class="error" *ngIf="errorMessage">{{ errorMessage }}</p>
+  <form (ngSubmit)="onSubmit()">
+    <div class="field">
+      <label for="username">Username or email</label>
+      <input
+        id="username"
+        name="username"
+        type="text"
+        autocomplete="username"
+        required
+        [(ngModel)]="username"
+      />
+    </div>
+    <div class="field">
+      <label for="password">Password</label>
+      <input
+        id="password"
+        name="password"
+        type="password"
+        autocomplete="current-password"
+        required
+        [(ngModel)]="password"
+      />
+    </div>
+    <button type="submit" [disabled]="isSubmitting">Log in</button>
+  </form>
+</div>

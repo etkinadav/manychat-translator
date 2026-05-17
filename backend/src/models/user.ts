@@ -1,5 +1,5 @@
 import crypto from "crypto";
-import mongoose, { type Document, type Model } from "mongoose";
+import mongoose, { type Document, type Model, type Types } from "mongoose";
 import validator from "validator";
 
 const validateLocalStrategyEmail = function (
@@ -23,6 +23,8 @@ export interface IUser extends Document {
   provider: string;
   roles: string[];
   language: string;
+  gender: "" | "male" | "female";
+  organization?: Types.ObjectId | null;
   home_printingServices_list: string[];
   home_branches_list: string[];
   updated?: Date;
@@ -63,6 +65,16 @@ const userSchema = new mongoose.Schema<IUser>(
     },
     updated: { type: Date },
     language: { type: String, default: "en" },
+    gender: {
+      type: String,
+      enum: ["", "male", "female"],
+      default: "",
+    },
+    organization: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Organization",
+      default: null,
+    },
   },
   { collection: "users" },
 );

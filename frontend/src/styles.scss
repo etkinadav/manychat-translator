@@ -1,0 +1,144 @@
+:root {
+  color-scheme: light;
+  font-family: "Segoe UI", system-ui, sans-serif;
+  line-height: 1.5;
+  --bg: #f4f6fb;
+  --card: #ffffff;
+  --text: #1a1f36;
+  --muted: #5c6478;
+  --accent: #2563eb;
+  --accent-hover: #1d4ed8;
+  --danger: #b91c1c;
+  --border: #d8deea;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.fill-screen {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.fill-screen--top {
+  align-items: flex-start;
+}
+
+h1 {
+  margin: 0 0 8px;
+  font-size: 1.5rem;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.field {
+  margin-bottom: 16px;
+}
+
+label,
+.label-block {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.field-hint {
+  margin: 6px 0 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+input,
+select,
+textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 1rem;
+  font-family: inherit;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  outline: 2px solid rgba(37, 99, 235, 0.25);
+  border-color: var(--accent);
+}
+
+button {
+  padding: 11px 14px;
+  border: none;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+button:hover {
+  background: var(--accent-hover);
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.error {
+  margin: 0 0 12px;
+  color: var(--danger);
+  font-size: 0.9rem;
+}
+
+.status-msg {
+  margin: 0 0 12px;
+  color: #15803d;
+  font-size: 0.9rem;
+}
+
+.btn-secondary,
+.btn-danger {
+  background: #e2e8f0;
+  color: var(--text);
+}
+
+.btn-secondary:hover {
+  background: #cbd5e1;
+}
+
+.btn-danger {
+  background: var(--danger);
+  color: #fff;
+}
+
+.btn-danger:hover {
+  background: #991b1b;
+}
+
+.btn-row {
+  display: flex;
+  gap: 12px;
+  margin-top: 16px;
+  flex-wrap: wrap;
+}
+
+.btn-row button {
+  flex: 1;
+  min-width: 120px;
+}
