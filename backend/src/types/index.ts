@@ -5,14 +5,12 @@
 export interface TranslateRequest {
   texts: string[];
   /**
-   * BCP-47 target language (default from server: `en`).
-   * Incoming chat: `"en"`. Outgoing composer: `"he"`.
+   * Incoming chat (default): `TRANSLATE_SOURCE_LANGUAGE` → `TRANSLATE_TARGET_LANGUAGE`.
+   * Outgoing composer: the reverse (TARGET → SOURCE).
    */
+  outgoing?: boolean;
+  /** Override env defaults when set. */
   targetLanguage?: string;
-  /**
-   * Optional source language (e.g. `"he"`). Omit for Google auto-detect.
-   * Server default may be set via `TRANSLATE_SOURCE_LANGUAGE` in `.env`.
-   */
   sourceLanguage?: string;
   /**
    * When true, each translation is passed through outgoing prompt cleanup

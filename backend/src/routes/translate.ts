@@ -10,6 +10,7 @@ import {
   translateTexts,
 } from "../services/googleTranslate.service";
 import { cleanOutgoingTranslation } from "../services/outgoingPromptCleanup.service";
+import { resolveLanguagePair } from "../services/translateLanguagePair";
 
 const router = Router();
 
@@ -48,24 +49,19 @@ router.post<
       .json({ error: "Every entry in `texts` must be a string." });
   }
 
-  const defaultTarget =
-    process.env.TRANSLATE_TARGET_LANGUAGE?.trim() || "en";
-  const targetLanguage =
-    typeof body?.targetLanguage === "string" && body.targetLanguage.trim()
-      ? body.targetLanguage.trim()
-      : defaultTarget;
-
-  const defaultSource = process.env.TRANSLATE_SOURCE_LANGUAGE?.trim();
-  const sourceLanguage =
-    typeof body?.sourceLanguage === "string" && body.sourceLanguage.trim()
-      ? body.sourceLanguage.trim()
-      : defaultSource || undefined;
+  const { source: sourceLanguage, target: targetLanguage } = resolveLanguagePair({
+    outgoing: body?.outgoing === true,
+    sourceLanguage:
+      typeof body?.sourceLanguage === "string" ? body.sourceLanguage : undefined,
+    targetLanguage:
+      typeof body?.targetLanguage === "string" ? body.targetLanguage : undefined,
+  });
 
   const stripInstructionPrefix = body?.stripInstructionPrefix === true;
 
   const totalChars = texts.reduce((sum, t) => sum + t.length, 0);
   console.log(
-    `[translate] request received | sourceLanguage=${sourceLanguage ?? "auto"} | targetLanguage=${targetLanguage} | stripInstructionPrefix=${stripInstructionPrefix} | count=${texts.length} | chars=${totalChars} | first=${JSON.stringify(
+    `[translate] request received | outgoing=${body?.outgoing === true} | ${sourceLanguage} -> ${targetLanguage} | stripInstructionPrefix=${stripInstructionPrefix} | count=${texts.length} | chars=${totalChars} | first=${JSON.stringify(
       texts[0] ?? "",
     )}`,
   );

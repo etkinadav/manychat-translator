@@ -228,7 +228,7 @@ function postTranslateOutgoing(promptText: string): Promise<string> {
       {
         type: "translate",
         texts: [promptText],
-        targetLanguage: "he",
+        outgoing: true,
         stripInstructionPrefix: true,
       },
       (response: CsTranslateReply | undefined) => {
