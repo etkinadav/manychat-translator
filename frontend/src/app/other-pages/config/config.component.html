@@ -58,6 +58,30 @@
         <p class="field-hint">Used for outgoing message tone in the extension.</p>
       </div>
       <button type="button" (click)="saveProfile()">Save profile</button>
+      <div class="field extension-link">
+        <h3 class="extension-link-title">Chrome extension</h3>
+        <label for="extension-id">Extension ID</label>
+        <input
+          id="extension-id"
+          type="text"
+          [(ngModel)]="extensionId"
+          placeholder="e.g. abcdefghijklmnopqrstuvwxyzabcd"
+          spellcheck="false"
+        />
+        <p class="field-hint">
+          In Chrome open <strong>chrome://extensions</strong>, enable Developer mode,
+          find <strong>Manychat Translator</strong>, and copy the ID under the name.
+        </p>
+        <button type="button" class="btn-secondary" (click)="linkExtension()">
+          Link Chrome extension
+        </button>
+        <p class="field-hint status-msg" *ngIf="extensionLinkMessage">
+          {{ extensionLinkMessage }}
+        </p>
+        <p class="field-hint">
+          Alternative: click the extension icon on Manychat and sign in there (no ID needed).
+        </p>
+      </div>
     </section>
 
     <section class="config-section" *ngIf="profile.organization as org">

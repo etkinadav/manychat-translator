@@ -1,10 +1,10 @@
 /**
- * Outgoing composer translation — English → Hebrew (gender-aware).
- *
- * Injects a compact toolbar (gender selector + Translate button) next to
- * the Manychat reply textarea. Builds an instruction prompt for Google
- * Translate; the backend strips echoed instruction headers from the result.
+ * Outgoing composer translation — user language → organization language.
  */
+
+import { translateToButtonLabel } from "./constants/languages";
+import { fetchSession } from "./session-client";
+import type { ExtensionSession } from "./types";
 
 const LOG_PREFIX = "[ManychatTranslator:outgoing]";
 const log = (...args: unknown[]) => console.log(LOG_PREFIX, ...args);
@@ -13,16 +13,13 @@ const warn = (...args: unknown[]) => console.warn(LOG_PREFIX, ...args);
 const TEXTAREA_SELECTOR =
   'textarea[name="whatsappMessageInput"][data-mc-editor="true"]';
 const TOOLBAR_ATTR = "data-mc-outgoing-toolbar";
-const BUTTON_ATTR = "data-mc-translate-to-hebrew";
+const BUTTON_ATTR = "data-mc-translate-outgoing";
 const BUTTON_CLASS = "mc-translate-to-hebrew-btn";
-const GENDER_INPUT_NAME = "mc-speaker-gender";
 
-type SpeakerGender = "female" | "male";
-
-const LABEL_DEFAULT = "Translate to Hebrew";
 const LABEL_LOADING = "Translating...";
 const LABEL_SUCCESS = "Translated ✓";
 const LABEL_ERROR = "Translation failed";
+const LABEL_SIGN_IN = "Sign in (extension popup)";
 
 const OUTGOING_RESCAN_DEBOUNCE_MS = 150;
 const POST_NAVIGATION_DELAYS_MS = [200, 600, 1500];
@@ -30,8 +27,8 @@ const REQUEST_TIMEOUT_MS = 15000;
 const ERROR_RESET_MS = 2000;
 const SUCCESS_RESET_MS = 2000;
 
-/** Persisted while the page is open; restored when toolbar is re-injected. */
-let selectedGender: SpeakerGender = "female";
+let cachedSession: ExtensionSession | null = null;
+let defaultButtonLabel = LABEL_SIGN_IN;
 
 interface CsTranslateReply {
   ok: boolean;
@@ -41,6 +38,24 @@ interface CsTranslateReply {
 
 let rescanTimer: number | null = null;
 let outgoingObserver: MutationObserver | null = null;
+
+async function ensureSession(): Promise<ExtensionSession | null> {
+  try {
+    cachedSession = await fetchSession(false);
+    if (cachedSession.organization) {
+      defaultButtonLabel = translateToButtonLabel(
+        cachedSession.organization.language,
+      );
+    } else {
+      defaultButtonLabel = "Connect organization (web app)";
+    }
+    return cachedSession;
+  } catch {
+    cachedSession = null;
+    defaultButtonLabel = LABEL_SIGN_IN;
+    return null;
+  }
+}
 
 function findComposerTextarea(): HTMLTextAreaElement | null {
   return document.querySelector<HTMLTextAreaElement>(TEXTAREA_SELECTOR);
@@ -54,25 +69,19 @@ function findToolbarForTextarea(textarea: HTMLTextAreaElement): HTMLElement | nu
   return document.querySelector<HTMLElement>(`[${TOOLBAR_ATTR}="true"]`);
 }
 
-function buildTranslationPrompt(userText: string, gender: SpeakerGender): string {
+function buildTranslationPrompt(
+  userText: string,
+  gender: "" | "male" | "female",
+  targetLanguage: string,
+): string {
+  const targetLabel = targetLanguage.toUpperCase();
   const speakerLine =
-    gender === "female"
-      ? "The speaker is female:"
-      : "The speaker is male:";
-  return `Translate to Hebrew. ${speakerLine}\n${userText}`;
-}
-
-function readGenderFromToolbar(toolbar: HTMLElement): SpeakerGender {
-  const checked = toolbar.querySelector<HTMLInputElement>(
-    `input[name="${GENDER_INPUT_NAME}"]:checked`,
-  );
-  return checked?.value === "male" ? "male" : "female";
-}
-
-function getSelectedGender(): SpeakerGender {
-  const toolbar = document.querySelector<HTMLElement>(`[${TOOLBAR_ATTR}="true"]`);
-  if (toolbar) return readGenderFromToolbar(toolbar);
-  return selectedGender;
+    gender === "male"
+      ? "The speaker is male:"
+      : gender === "female"
+        ? "The speaker is female:"
+        : "The speaker:";
+  return `Translate to ${targetLabel}. ${speakerLine}\n${userText}`;
 }
 
 function createTranslateButton(): HTMLButtonElement {
@@ -80,7 +89,7 @@ function createTranslateButton(): HTMLButtonElement {
   btn.type = "button";
   btn.className = BUTTON_CLASS;
   btn.setAttribute(BUTTON_ATTR, "true");
-  btn.textContent = LABEL_DEFAULT;
+  btn.textContent = defaultButtonLabel;
   return btn;
 }
 
@@ -89,38 +98,12 @@ function createOutgoingToolbar(): HTMLDivElement {
   toolbar.className = "mc-outgoing-toolbar";
   toolbar.setAttribute(TOOLBAR_ATTR, "true");
 
-  const genderWrap = document.createElement("div");
-  genderWrap.className = "mc-gender-selector";
-  genderWrap.setAttribute("role", "group");
-  genderWrap.setAttribute("aria-label", "Speaker gender");
-
-  for (const { value, label } of [
-    { value: "female" as const, label: "Female" },
-    { value: "male" as const, label: "Male" },
-  ]) {
-    const labelEl = document.createElement("label");
-    labelEl.className = "mc-gender-option";
-    const input = document.createElement("input");
-    input.type = "radio";
-    input.name = GENDER_INPUT_NAME;
-    input.value = value;
-    input.checked = selectedGender === value;
-    input.addEventListener("change", () => {
-      if (input.checked) {
-        selectedGender = value;
-        log("selected gender:", selectedGender);
-      }
-    });
-    labelEl.append(input, document.createTextNode(` ${label}`));
-    genderWrap.appendChild(labelEl);
-  }
-
   const btn = createTranslateButton();
   btn.addEventListener("click", () => {
     void onTranslateClick(btn);
   });
 
-  toolbar.append(genderWrap, btn);
+  toolbar.append(btn);
   return toolbar;
 }
 
@@ -145,7 +128,7 @@ function setButtonState(
       btn.textContent = LABEL_ERROR;
       break;
     default:
-      btn.textContent = LABEL_DEFAULT;
+      btn.textContent = defaultButtonLabel;
   }
 }
 
@@ -157,10 +140,7 @@ function scheduleButtonReset(
   window.setTimeout(() => setButtonState(btn, state), delayMs);
 }
 
-function setTextareaValue(
-  textarea: HTMLTextAreaElement,
-  value: string,
-): void {
+function setTextareaValue(textarea: HTMLTextAreaElement, value: string): void {
   const setter = Object.getOwnPropertyDescriptor(
     HTMLTextAreaElement.prototype,
     "value",
@@ -248,6 +228,13 @@ function postTranslateOutgoing(promptText: string): Promise<string> {
 }
 
 async function onTranslateClick(btn: HTMLButtonElement): Promise<void> {
+  const session = await ensureSession();
+  if (!session?.organization) {
+    setButtonState(btn, "error");
+    scheduleButtonReset(btn, "default", ERROR_RESET_MS);
+    return;
+  }
+
   const textarea = findComposerTextarea();
   if (!textarea) {
     warn("textarea not found on click");
@@ -257,21 +244,18 @@ async function onTranslateClick(btn: HTMLButtonElement): Promise<void> {
   const userText = textarea.value.trim();
   if (!userText) return;
 
-  const gender = getSelectedGender();
-  const prompt = buildTranslationPrompt(userText, gender);
+  const gender = session.gender === "male" ? "male" : "female";
+  const prompt = buildTranslationPrompt(
+    userText,
+    gender,
+    session.organization.language,
+  );
 
-  log("outgoing translation started", { gender, userText: userText.slice(0, 60) });
-  log("prompt built", { prompt: prompt.slice(0, 120) });
   setButtonState(btn, "loading");
 
   try {
     const translated = (await postTranslateOutgoing(prompt)).trim();
-    log("backend response received", {
-      translated: translated.slice(0, 80),
-    });
-
     if (!translated) {
-      warn("outgoing translation returned empty — keeping original");
       setButtonState(btn, "error");
       scheduleButtonReset(btn, "default", ERROR_RESET_MS);
       return;
@@ -280,9 +264,6 @@ async function onTranslateClick(btn: HTMLButtonElement): Promise<void> {
     const liveTextarea = findComposerTextarea() ?? textarea;
     setTextareaValue(liveTextarea, translated);
     focusTextareaEnd(liveTextarea);
-
-    log("outgoing translation completed");
-    log("textarea updated");
     setButtonState(btn, "success");
     scheduleButtonReset(btn, "default", SUCCESS_RESET_MS);
   } catch (err) {
@@ -295,21 +276,20 @@ async function onTranslateClick(btn: HTMLButtonElement): Promise<void> {
 function tryInjectComposerToolbar(): boolean {
   const textarea = findComposerTextarea();
   if (!textarea) return false;
-
   if (findToolbarForTextarea(textarea)) return false;
 
-  log("textarea detected");
   const toolbar = createOutgoingToolbar();
   textarea.insertAdjacentElement("afterend", toolbar);
-  log("translate button injected (with gender selector)");
+  void ensureSession().then(() => {
+    const btn = toolbar.querySelector<HTMLButtonElement>(`.${BUTTON_CLASS}`);
+    if (btn) btn.textContent = defaultButtonLabel;
+  });
   return true;
 }
 
 function isRelevantOutgoingMutation(mutation: MutationRecord): boolean {
   const target = mutation.target as Element | null;
-  if (
-    target?.closest?.(`.${BUTTON_CLASS}, .mc-outgoing-toolbar, .mc-gender-selector`)
-  ) {
+  if (target?.closest?.(`.${BUTTON_CLASS}, .mc-outgoing-toolbar`)) {
     return false;
   }
   if (mutation.type === "childList") {
@@ -352,6 +332,7 @@ function startOutgoingObserver(): void {
 }
 
 export function initOutgoing(): void {
+  void ensureSession();
   tryInjectComposerToolbar();
   startOutgoingObserver();
   for (const delay of POST_NAVIGATION_DELAYS_MS) {

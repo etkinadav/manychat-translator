@@ -1,4 +1,6 @@
-import type { Request, Response } from "express";
+import type { Response } from "express";
+import { User } from "../models/user";
+import type { AuthRequest } from "../middleware/check-auth";
 import type {
   ErrorResponse,
   TranslateRequest,
@@ -10,15 +12,14 @@ import {
   translateTexts,
 } from "../services/googleTranslate.service";
 import { cleanOutgoingTranslation } from "../services/outgoingPromptCleanup.service";
-import { resolveLanguagePair } from "../services/translateLanguagePair";
+import { resolveLanguagePairFromProfile } from "../services/translateLanguagePair";
+import { resolveOrganizationField } from "./organization.helpers";
 
 /**
- * POST /api/translate
- *
- * Translates an array of strings in one batched Google call per HTTP request.
+ * POST /api/translate — requires JWT; languages from user + organization.
  */
 export async function translateBatch(
-  req: Request,
+  req: AuthRequest,
   res: Response<TranslateResponse | ErrorResponse>,
 ): Promise<void> {
   const body = req.body as TranslateRequest | undefined;
@@ -39,24 +40,36 @@ export async function translateBatch(
     return;
   }
 
-  const { source: sourceLanguage, target: targetLanguage } = resolveLanguagePair({
-    outgoing: body?.outgoing === true,
-    sourceLanguage:
-      typeof body?.sourceLanguage === "string" ? body.sourceLanguage : undefined,
-    targetLanguage:
-      typeof body?.targetLanguage === "string" ? body.targetLanguage : undefined,
-  });
-
-  const stripInstructionPrefix = body?.stripInstructionPrefix === true;
-
-  const totalChars = texts.reduce((sum, t) => sum + t.length, 0);
-  console.log(
-    `[translate] request received | outgoing=${body?.outgoing === true} | ${sourceLanguage} -> ${targetLanguage} | stripInstructionPrefix=${stripInstructionPrefix} | count=${texts.length} | chars=${totalChars} | first=${JSON.stringify(
-      texts[0] ?? "",
-    )}`,
-  );
-
   try {
+    const user = await User.findById(req.userData!.userId);
+    if (!user) {
+      res.status(404).json({ error: "User_not_found" });
+      return;
+    }
+
+    const org = await resolveOrganizationField(user.organization);
+    if (!org) {
+      res.status(403).json({
+        error:
+          "No organization connected. Connect to an organization in Configuration first.",
+      });
+      return;
+    }
+
+    const { source: sourceLanguage, target: targetLanguage } =
+      resolveLanguagePairFromProfile({
+        userLanguage: user.language || "en",
+        orgLanguage: org.language,
+        outgoing: body?.outgoing === true,
+      });
+
+    const stripInstructionPrefix = body?.stripInstructionPrefix === true;
+
+    const totalChars = texts.reduce((sum, t) => sum + t.length, 0);
+    console.log(
+      `[translate] user=${String(user._id)} org=${String(org._id)} | outgoing=${body?.outgoing === true} | ${sourceLanguage} -> ${targetLanguage} | count=${texts.length} | chars=${totalChars}`,
+    );
+
     let translations = await translateTexts(
       texts,
       targetLanguage,
@@ -64,17 +77,13 @@ export async function translateBatch(
     );
     if (stripInstructionPrefix) {
       translations = translations.map((raw) => cleanOutgoingTranslation(raw));
-      console.log(
-        `[translate] prompt cleaning applied to ${translations.length} result(s)`,
-      );
     }
-    console.log(`[translate] response sent  | count=${translations.length}`);
     res.json({ translations });
   } catch (err) {
     if (isTranslationFatalError(err)) {
       console.error("[translate] Google Translate failed:", err);
       const message = isTranslationConfigError(err)
-        ? "Google Translate project misconfigured. Set GOOGLE_CLOUD_PROJECT in backend/.env to your real GCP project ID (not your-gcp-project-id)."
+        ? "Google Translate project misconfigured. Set GOOGLE_CLOUD_PROJECT in backend/.env."
         : "Google Translate authentication failed. Run: gcloud auth application-default login";
       res.status(503).json({ error: message });
       return;

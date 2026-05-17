@@ -5,6 +5,7 @@ import { LANGUAGE_OPTIONS } from "../../constants/languages";
 import { AuthService } from "../../auth/auth.service";
 import { ProfileService } from "../../services/profile.service";
 import { OrganizationsService } from "../../services/organizations.service";
+import { ExtensionSyncService } from "../../services/extension-sync.service";
 import type { OrganizationSummary } from "../../models/organization.model";
 import type { UserProfile } from "../../models/user-profile.model";
 
@@ -34,16 +35,35 @@ export class ConfigComponent implements OnInit {
   profileLanguage = "en";
   profileGender: "" | "male" | "female" = "";
   connectPassword = "";
+  extensionLinkMessage = "";
+  extensionId = "";
 
   constructor(
     private authService: AuthService,
     private profileService: ProfileService,
     private organizationsService: OrganizationsService,
+    private extensionSyncService: ExtensionSyncService,
     private router: Router,
   ) {}
 
   ngOnInit(): void {
+    this.extensionId = this.extensionSyncService.getExtensionId();
     this.loadProfile();
+  }
+
+  linkExtension(): void {
+    this.extensionSyncService.saveExtensionId(this.extensionId);
+    void this.extensionSyncService
+      .syncAuthToExtension(this.extensionId)
+      .then((result) => {
+        this.extensionLinkMessage = result.message;
+        if (result.ok) {
+          this.statusMessage = result.message;
+          this.errorMessage = "";
+        } else {
+          this.errorMessage = "";
+        }
+      });
   }
 
   logout(): void {

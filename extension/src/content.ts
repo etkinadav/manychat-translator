@@ -271,8 +271,9 @@ async function flushQueue(): Promise<void> {
     });
     log(`DOM updated for ${batch.length} message(s)`);
   } catch (err) {
-    warn("backend request failed:", err);
-    batch.forEach((item) => applyError(item.placeholder));
+    const msg = err instanceof Error ? err.message : "translation failed";
+    warn("backend request failed:", msg);
+    batch.forEach((item) => applyError(item.placeholder, msg));
   }
 }
 
@@ -288,10 +289,10 @@ function applyTranslation(placeholder: HTMLElement, text: string): void {
   placeholder.classList.add("updated");
 }
 
-function applyError(placeholder: HTMLElement): void {
+function applyError(placeholder: HTMLElement, message = "translation failed"): void {
   placeholder.classList.remove("loading", "updated");
   placeholder.classList.add("error");
-  placeholder.textContent = "translation failed";
+  placeholder.textContent = message;
   setStatus(placeholder, "error");
 }
 

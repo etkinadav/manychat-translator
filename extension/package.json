@@ -5,8 +5,8 @@
   "description": "Chrome extension (MV3) that detects Manychat chat messages and duplicates them inline. Future-ready scaffold for an AI translation layer.",
   "type": "module",
   "scripts": {
-    "dev": "vite build --watch -c vite.content.config.ts & vite build --watch -c vite.background.config.ts",
-    "build": "tsc --noEmit && vite build -c vite.content.config.ts && vite build -c vite.background.config.ts",
+    "dev": "vite build --watch -c vite.content.config.ts & vite build --watch -c vite.background.config.ts & vite build --watch -c vite.popup.config.ts",
+    "build": "tsc --noEmit && vite build -c vite.content.config.ts && vite build -c vite.background.config.ts && vite build -c vite.popup.config.ts",
     "clean": "rimraf dist"
   },
   "devDependencies": {

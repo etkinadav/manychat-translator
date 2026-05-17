@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Manychat Translator</title>
+    <style>
+      body {
+        margin: 0;
+        font-family: "Segoe UI", system-ui, sans-serif;
+        font-size: 14px;
+        color: #1a1f36;
+        background: #f4f6fb;
+        min-width: 300px;
+      }
+      .wrap {
+        padding: 16px;
+      }
+      h1 {
+        margin: 0 0 4px;
+        font-size: 1.1rem;
+      }
+      .muted {
+        color: #5c6478;
+        margin: 0 0 16px;
+        font-size: 0.85rem;
+      }
+      label {
+        display: block;
+        margin-bottom: 4px;
+        color: #5c6478;
+        font-size: 0.85rem;
+      }
+      .field {
+        margin-bottom: 12px;
+      }
+      input {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 8px 10px;
+        border: 1px solid #d8deea;
+        border-radius: 8px;
+      }
+      button {
+        width: 100%;
+        padding: 10px;
+        border: none;
+        border-radius: 8px;
+        background: #2563eb;
+        color: #fff;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      button:disabled {
+        opacity: 0.6;
+      }
+      button.secondary {
+        margin-top: 8px;
+        background: #e2e8f0;
+        color: #1a1f36;
+      }
+      .error {
+        color: #b91c1c;
+        font-size: 0.85rem;
+        margin: 0 0 10px;
+      }
+      .status {
+        color: #15803d;
+        font-size: 0.85rem;
+        margin: 0 0 10px;
+      }
+      .session {
+        background: #fff;
+        border: 1px solid #d8deea;
+        border-radius: 8px;
+        padding: 12px;
+        margin-bottom: 12px;
+        font-size: 0.85rem;
+      }
+      .session p {
+        margin: 0 0 6px;
+      }
+      .hidden {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <h1>Manychat Translator</h1>
+      <p class="muted">Sign in with the same account as the web app.</p>
+      <p id="error" class="error hidden"></p>
+      <p id="status" class="status hidden"></p>
+      <div id="session-view" class="session hidden"></div>
+      <form id="login-form">
+        <div class="field">
+          <label for="username">Email or username</label>
+          <input id="username" type="text" autocomplete="username" required />
+        </div>
+        <div class="field">
+          <label for="password">Password</label>
+          <input id="password" type="password" autocomplete="current-password" required />
+        </div>
+        <button type="submit" id="submit-btn">Sign in</button>
+      </form>
+      <button type="button" id="logout-btn" class="secondary hidden">Log out</button>
+    </div>
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>

@@ -1,8 +1,13 @@
 {
   "manifest_version": 3,
-  "name": "Manychat Translator (scaffold)",
-  "version": "0.2.0",
-  "description": "Detects Manychat chat messages, sends them to a local backend, and renders the response inline under each message.",
+  "name": "Manychat Translator",
+  "version": "0.3.0",
+  "description": "Translates Manychat messages using your account language and organization settings.",
+  "permissions": ["storage"],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Manychat Translator"
+  },
   "background": {
     "service_worker": "background.js",
     "type": "module"
@@ -12,6 +17,14 @@
     "http://localhost:3000/*",
     "http://127.0.0.1:3000/*"
   ],
+  "externally_connectable": {
+    "matches": [
+      "http://localhost:3000/*",
+      "http://localhost:5173/*",
+      "http://127.0.0.1:3000/*",
+      "http://127.0.0.1:5173/*"
+    ]
+  },
   "content_scripts": [
     {
       "matches": ["https://app.manychat.com/*"],

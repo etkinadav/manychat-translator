@@ -5,13 +5,11 @@
 export interface TranslateRequest {
   texts: string[];
   /**
-   * Incoming chat (default): `TRANSLATE_SOURCE_LANGUAGE` → `TRANSLATE_TARGET_LANGUAGE`.
-   * Outgoing composer: the reverse (TARGET → SOURCE).
+   * Incoming chat: organization language → user language.
+   * Outgoing composer: user language → organization language.
+   * Languages are resolved on the server from the authenticated profile.
    */
   outgoing?: boolean;
-  /** Override env defaults when set. */
-  targetLanguage?: string;
-  sourceLanguage?: string;
   /**
    * When true, each translation is passed through outgoing prompt cleanup
    * (strip translated "Translate to Hebrew / speaker is …" headers).

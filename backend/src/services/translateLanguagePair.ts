@@ -1,13 +1,24 @@
+import { ALLOWED_ORG_LANGUAGES } from "../controllers/organization.helpers";
+
 /**
- * Resolves source/target languages from .env defaults.
+ * Language pair resolution for translation.
  *
- * Incoming chat:  TRANSLATE_SOURCE_LANGUAGE → TRANSLATE_TARGET_LANGUAGE
- * Outgoing composer: reverse (TARGET → SOURCE)
+ * With a connected organization:
+ *   Incoming chat:  org.language → user.language
+ *   Outgoing composer: user.language → org.language
+ *
+ * Env defaults are only a dev fallback when no profile pair is supplied.
  */
 
 export interface LanguagePair {
   source: string;
   target: string;
+}
+
+function normalizeLang(code: string | undefined): string | null {
+  if (!code) return null;
+  const lang = code.trim().toLowerCase();
+  return ALLOWED_ORG_LANGUAGES.has(lang) ? lang : null;
 }
 
 export function envLanguagePair(): LanguagePair {
@@ -17,6 +28,21 @@ export function envLanguagePair(): LanguagePair {
   };
 }
 
+export function resolveLanguagePairFromProfile(options: {
+  userLanguage: string;
+  orgLanguage: string;
+  outgoing?: boolean;
+}): LanguagePair {
+  const userLang = normalizeLang(options.userLanguage) ?? "en";
+  const orgLang = normalizeLang(options.orgLanguage) ?? userLang;
+
+  if (options.outgoing) {
+    return { source: userLang, target: orgLang };
+  }
+  return { source: orgLang, target: userLang };
+}
+
+/** @deprecated Use resolveLanguagePairFromProfile when user is authenticated. */
 export function resolveLanguagePair(options: {
   outgoing?: boolean;
   sourceLanguage?: string;
