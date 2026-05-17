@@ -10,6 +10,7 @@ import {
   normalizeOrganizationName,
   organizationDisplayName,
   userCanManageOrganization,
+  verifyOrganizationPassword,
 } from "./organization.helpers";
 
 export async function listOrganizations(
@@ -207,14 +208,30 @@ export async function connectOrganization(
       return;
     }
 
-    const hashed = org.hashPassword(password);
-    if (hashed.toString() !== org.password.toString()) {
+    if (!verifyOrganizationPassword(org, password)) {
       res.status(401).json({ message: "Organization_password_incorrect" });
       return;
     }
 
-    user.organization = org._id;
-    await user.save();
+    // updateOne avoids full-document validation (legacy beams users may have extra fields)
+    const updateResult = await User.updateOne(
+      { _id: user._id },
+      { $set: { organization: org._id } },
+    );
+    if (updateResult.matchedCount === 0) {
+      res.status(404).json({ message: "User_not_found" });
+      return;
+    }
+    if (updateResult.modifiedCount === 0 && String(user.organization) !== String(org._id)) {
+      console.warn(
+        "[organizations] connect: update matched but did not modify organization",
+        { userId: user._id, organizationId: org._id },
+      );
+    }
+
+    console.log(
+      `[organizations] user ${String(user._id)} connected to org ${String(org._id)} (${organizationDisplayName(org)})`,
+    );
 
     res.status(200).json({
       email: user.email,

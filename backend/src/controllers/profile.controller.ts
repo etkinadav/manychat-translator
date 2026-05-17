@@ -1,29 +1,20 @@
 import type { Response } from "express";
-import { type IOrganization } from "../models/organization";
 import { User } from "../models/user";
 import type { AuthRequest } from "../middleware/check-auth";
 import {
   ALLOWED_ORG_LANGUAGES,
   formatOrganization,
+  resolveOrganizationField,
 } from "./organization.helpers";
-
-async function loadUser(userId: string) {
-  return User.findById(userId).populate<{ organization: IOrganization | null }>(
-    "organization",
-  );
-}
 
 export async function getProfile(req: AuthRequest, res: Response): Promise<void> {
   try {
-    const user = await loadUser(req.userData!.userId);
+    const user = await User.findById(req.userData!.userId);
     if (!user) {
       res.status(404).json({ message: "User_not_found" });
       return;
     }
-    const org =
-      user.organization && typeof user.organization === "object"
-        ? user.organization
-        : null;
+    const org = await resolveOrganizationField(user.organization);
 
     res.status(200).json({
       email: user.email,
@@ -67,11 +58,7 @@ export async function updateProfile(
     }
 
     await user.save();
-    const populated = await loadUser(String(user._id));
-    const org =
-      populated?.organization && typeof populated.organization === "object"
-        ? populated.organization
-        : null;
+    const org = await resolveOrganizationField(user.organization);
 
     res.status(200).json({
       email: user.email,
@@ -95,8 +82,7 @@ export async function disconnectOrganization(
       res.status(404).json({ message: "User_not_found" });
       return;
     }
-    user.organization = null;
-    await user.save();
+    await User.updateOne({ _id: user._id }, { $set: { organization: null } });
 
     res.status(200).json({
       email: user.email,

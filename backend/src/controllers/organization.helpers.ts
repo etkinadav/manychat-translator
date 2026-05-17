@@ -1,4 +1,5 @@
-import type { IOrganization } from "../models/organization";
+import mongoose, { type Types } from "mongoose";
+import { Organization, type IOrganization } from "../models/organization";
 import type { IUser } from "../models/user";
 
 export const ALLOWED_ORG_LANGUAGES = new Set([
@@ -58,6 +59,39 @@ export function userCanManageOrganization(
   if (connectedId === orgId) return true;
   if (org.createdBy && String(org.createdBy) === String(user._id)) return true;
   return false;
+}
+
+export function isPopulatedOrganization(
+  value: IOrganization | Types.ObjectId | null | undefined,
+): value is IOrganization {
+  return (
+    value !== null &&
+    value !== undefined &&
+    typeof value === "object" &&
+    "language" in value
+  );
+}
+
+/** Load organization from a populated doc or a stored ObjectId ref. */
+export async function resolveOrganizationField(
+  organization: IOrganization | Types.ObjectId | null | undefined,
+): Promise<IOrganization | null> {
+  if (!organization) return null;
+  if (isPopulatedOrganization(organization)) {
+    return organization;
+  }
+  const id = String(organization);
+  if (!mongoose.Types.ObjectId.isValid(id)) return null;
+  return Organization.findById(id);
+}
+
+export function verifyOrganizationPassword(
+  org: IOrganization,
+  password: string,
+): boolean {
+  if (!org.salt) return false;
+  const hashed = org.hashPassword(password);
+  return hashed.toString() === org.password.toString();
 }
 
 export function normalizeLanguage(value: unknown): string | null {
