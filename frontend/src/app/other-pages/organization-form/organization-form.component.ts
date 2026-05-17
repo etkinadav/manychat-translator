@@ -21,6 +21,7 @@ export class OrganizationFormComponent implements OnInit {
   isEdit = false;
   isLoading = true;
 
+  name = "";
   language = "en";
   translationContext = "";
   password = "";
@@ -47,6 +48,11 @@ export class OrganizationFormComponent implements OnInit {
   }
 
   onSubmit(): void {
+    if (!this.name.trim()) {
+      this.errorMessage = "Organization name is required.";
+      this.statusMessage = "";
+      return;
+    }
     if (!this.translationContext.trim()) {
       this.errorMessage = "Translation context is required.";
       this.statusMessage = "";
@@ -63,6 +69,7 @@ export class OrganizationFormComponent implements OnInit {
     if (this.isEdit) {
       this.organizationsService
         .update(this.editId, {
+          name: this.name.trim(),
           language: this.language,
           translationContext: this.translationContext.trim(),
           ...(this.password ? { password: this.password } : {}),
@@ -80,6 +87,7 @@ export class OrganizationFormComponent implements OnInit {
 
     this.organizationsService
       .create({
+        name: this.name.trim(),
         language: this.language,
         translationContext: this.translationContext.trim(),
         password: this.password,
@@ -97,6 +105,7 @@ export class OrganizationFormComponent implements OnInit {
 
   private loadForm(): void {
     if (!this.isEdit) {
+      this.name = "";
       this.language = "en";
       this.translationContext = "";
       this.password = "";
@@ -107,6 +116,7 @@ export class OrganizationFormComponent implements OnInit {
     this.isLoading = true;
     this.organizationsService.get(this.editId).subscribe({
       next: (data) => {
+        this.name = data.organization.name;
         this.language = data.organization.language;
         this.translationContext = data.organization.translationContext;
         this.password = "";

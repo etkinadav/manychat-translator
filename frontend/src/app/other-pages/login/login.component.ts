@@ -3,6 +3,8 @@ import { Router } from "@angular/router";
 import { HttpErrorResponse } from "@angular/common/http";
 import { AuthService } from "../../auth/auth.service";
 
+type AuthMode = "login" | "signup";
+
 @Component({
   selector: "app-login",
   templateUrl: "./login.component.html",
@@ -14,8 +16,15 @@ import { AuthService } from "../../auth/auth.service";
   },
 })
 export class LoginComponent implements OnInit {
+  mode: AuthMode = "login";
+
   username = "";
   password = "";
+
+  signupEmail = "";
+  signupPassword = "";
+  signupPasswordConfirm = "";
+
   errorMessage = "";
   isSubmitting = false;
 
@@ -30,7 +39,17 @@ export class LoginComponent implements OnInit {
     }
   }
 
-  onSubmit(): void {
+  showLogin(): void {
+    this.mode = "login";
+    this.errorMessage = "";
+  }
+
+  showSignup(): void {
+    this.mode = "signup";
+    this.errorMessage = "";
+  }
+
+  onLoginSubmit(): void {
     this.errorMessage = "";
     this.isSubmitting = true;
 
@@ -41,9 +60,41 @@ export class LoginComponent implements OnInit {
       },
       error: (err: HttpErrorResponse) => {
         this.isSubmitting = false;
-        const body = err.error as { message?: string } | undefined;
-        this.errorMessage = body?.message ?? err.message ?? "Login failed";
+        this.errorMessage = this.httpErrorMessage(err, "Login failed");
       },
     });
+  }
+
+  onSignupSubmit(): void {
+    this.errorMessage = "";
+
+    if (this.signupPassword !== this.signupPasswordConfirm) {
+      this.errorMessage = "Passwords do not match";
+      return;
+    }
+
+    this.isSubmitting = true;
+
+    this.authService
+      .signup(
+        this.signupEmail.trim(),
+        this.signupPassword,
+        this.signupPasswordConfirm,
+      )
+      .subscribe({
+        next: () => {
+          this.isSubmitting = false;
+          void this.router.navigate(["/config"]);
+        },
+        error: (err: HttpErrorResponse) => {
+          this.isSubmitting = false;
+          this.errorMessage = this.httpErrorMessage(err, "Sign up failed");
+        },
+      });
+  }
+
+  private httpErrorMessage(err: HttpErrorResponse, fallback: string): string {
+    const body = err.error as { message?: string } | undefined;
+    return body?.message ?? err.message ?? fallback;
   }
 }

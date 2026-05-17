@@ -14,10 +14,20 @@ export const ALLOWED_ORG_LANGUAGES = new Set([
   "uk",
 ]);
 
+export function organizationDisplayName(org: {
+  name?: string;
+  language: string;
+}): string {
+  const name = String(org.name ?? "").trim();
+  if (name) return name;
+  return org.language.toUpperCase();
+}
+
 export function formatOrganization(org: IOrganization | null) {
   if (!org) return null;
   return {
     id: String(org._id),
+    name: organizationDisplayName(org),
     language: org.language,
     translationContext: org.translationContext ?? "",
   };
@@ -26,9 +36,17 @@ export function formatOrganization(org: IOrganization | null) {
 export function formatOrganizationPublic(org: IOrganization) {
   return {
     id: String(org._id),
+    name: organizationDisplayName(org),
     language: org.language,
     translationContext: org.translationContext ?? "",
   };
+}
+
+export function normalizeOrganizationName(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const name = value.trim();
+  if (!name || name.length > 120) return null;
+  return name;
 }
 
 export function userCanManageOrganization(

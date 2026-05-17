@@ -18,6 +18,18 @@
       <section class="config-section">
         <h2>{{ isEdit ? "Organization details" : "New organization" }}</h2>
         <div class="field">
+          <label for="org-name">Organization name</label>
+          <input
+            id="org-name"
+            name="name"
+            type="text"
+            required
+            maxlength="120"
+            [(ngModel)]="name"
+          />
+          <p class="field-hint">Display name shown when agents choose this organization.</p>
+        </div>
+        <div class="field">
           <label for="org-language">Organization language</label>
           <select id="org-language" name="language" required [(ngModel)]="language">
             <option *ngFor="let opt of languageOptions" [value]="opt.value">

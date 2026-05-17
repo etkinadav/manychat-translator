@@ -24,6 +24,7 @@ export class OrganizationsService {
   }
 
   create(payload: {
+    name: string;
     language: string;
     translationContext: string;
     password: string;
@@ -37,6 +38,7 @@ export class OrganizationsService {
   update(
     id: string,
     payload: {
+      name: string;
       language: string;
       translationContext: string;
       password?: string;

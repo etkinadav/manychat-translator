@@ -63,8 +63,8 @@
     <section class="config-section" *ngIf="profile.organization as org">
       <h2>Organization</h2>
       <p class="connected-badge">
-        Connected — translate to
-        <strong>{{ org.language | uppercase }}</strong>
+        Connected to <strong>{{ org.name }}</strong>
+        — translate to <strong>{{ org.language | uppercase }}</strong>
       </p>
       <div class="field">
         <label>Translation context</label>
@@ -115,7 +115,8 @@
             [(ngModel)]="selectedOrgId"
           />
           <span>
-            <strong>{{ org.language | uppercase }}</strong>
+            <strong>{{ org.name }}</strong>
+            <span class="muted org-meta">{{ org.language | uppercase }}</span>
             <span class="muted org-preview">{{
               org.translationContextPreview || "No context"
             }}</span>
@@ -140,7 +141,7 @@
       <h2>Organization password</h2>
       <p class="field-hint">
         Connecting to
-        <strong>{{ selectedOrg?.language | uppercase }}</strong>
+        <strong>{{ selectedOrg?.name }}</strong>
       </p>
       <div class="field">
         <label for="org-password">Password</label>

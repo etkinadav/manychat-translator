@@ -1,8 +1,9 @@
 <div class="card">
-  <h1>Sign in</h1>
+  <h1>{{ mode === "login" ? "Sign in" : "Sign up" }}</h1>
   <p class="subtitle">Manychat Translator</p>
   <p class="error" *ngIf="errorMessage">{{ errorMessage }}</p>
-  <form (ngSubmit)="onSubmit()">
+
+  <form *ngIf="mode === 'login'" (ngSubmit)="onLoginSubmit()">
     <div class="field">
       <label for="username">Username or email</label>
       <input
@@ -26,5 +27,58 @@
       />
     </div>
     <button type="submit" [disabled]="isSubmitting">Log in</button>
+    <button
+      type="button"
+      class="btn-link"
+      [disabled]="isSubmitting"
+      (click)="showSignup()"
+    >
+      Sign up
+    </button>
+  </form>
+
+  <form *ngIf="mode === 'signup'" (ngSubmit)="onSignupSubmit()">
+    <div class="field">
+      <label for="signup-email">Email</label>
+      <input
+        id="signup-email"
+        name="email"
+        type="email"
+        autocomplete="email"
+        required
+        [(ngModel)]="signupEmail"
+      />
+    </div>
+    <div class="field">
+      <label for="signup-password">Password</label>
+      <input
+        id="signup-password"
+        name="password"
+        type="password"
+        autocomplete="new-password"
+        required
+        [(ngModel)]="signupPassword"
+      />
+    </div>
+    <div class="field">
+      <label for="signup-password-confirm">Confirm password</label>
+      <input
+        id="signup-password-confirm"
+        name="passwordConfirm"
+        type="password"
+        autocomplete="new-password"
+        required
+        [(ngModel)]="signupPasswordConfirm"
+      />
+    </div>
+    <button type="submit" [disabled]="isSubmitting">Create account</button>
+    <button
+      type="button"
+      class="btn-link"
+      [disabled]="isSubmitting"
+      (click)="showLogin()"
+    >
+      Already have an account? Sign in
+    </button>
   </form>
 </div>

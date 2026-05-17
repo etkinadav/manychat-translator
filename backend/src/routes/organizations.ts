@@ -1,33 +1,22 @@
 import { Router } from "express";
-import {
-  connectOrganization,
-  createOrganization,
-  getOrganization,
-  listOrganizations,
-  updateOrganization,
-} from "../controllers/organization.controller";
+import * as OrganizationController from "../controllers/organization.controller";
 import { checkAuth } from "../middleware/check-auth";
+import { asyncHandler } from "../middleware/async-handler";
 
 const router = Router();
 
-router.get("/", checkAuth, (req, res) => {
-  void listOrganizations(req, res);
-});
-
-router.post("/", checkAuth, (req, res) => {
-  void createOrganization(req, res);
-});
-
-router.post("/connect", checkAuth, (req, res) => {
-  void connectOrganization(req, res);
-});
-
-router.get("/:id", checkAuth, (req, res) => {
-  void getOrganization(req, res);
-});
-
-router.patch("/:id", checkAuth, (req, res) => {
-  void updateOrganization(req, res);
-});
+router.get("/", checkAuth, asyncHandler(OrganizationController.listOrganizations));
+router.post("/", checkAuth, asyncHandler(OrganizationController.createOrganization));
+router.post(
+  "/connect",
+  checkAuth,
+  asyncHandler(OrganizationController.connectOrganization),
+);
+router.get("/:id", checkAuth, asyncHandler(OrganizationController.getOrganization));
+router.patch(
+  "/:id",
+  checkAuth,
+  asyncHandler(OrganizationController.updateOrganization),
+);
 
 export default router;

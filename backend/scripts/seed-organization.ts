@@ -11,6 +11,7 @@ import { Organization } from "../src/models/organization";
 async function main(): Promise<void> {
   await connectMongo();
 
+  const name = process.env.SEED_ORG_NAME?.trim() || "Demo organization";
   const language = process.env.SEED_ORG_LANGUAGE?.trim() || "he";
   const password = process.env.SEED_ORG_PASSWORD?.trim() || "org-demo-password";
   const translationContext =
@@ -18,6 +19,7 @@ async function main(): Promise<void> {
     "Formal customer support tone. Keep replies concise.";
 
   const org = new Organization({
+    name,
     language,
     translationContext,
     password,
@@ -26,6 +28,7 @@ async function main(): Promise<void> {
 
   console.log("[seed] organization created:", {
     id: org._id,
+    name: org.name,
     language: org.language,
     passwordHint: password,
   });

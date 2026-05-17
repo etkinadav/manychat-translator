@@ -7,6 +7,8 @@ import {
   formatOrganization,
   formatOrganizationPublic,
   normalizeLanguage,
+  normalizeOrganizationName,
+  organizationDisplayName,
   userCanManageOrganization,
 } from "./organization.helpers";
 
@@ -16,13 +18,14 @@ export async function listOrganizations(
 ): Promise<void> {
   try {
     const orgs = await Organization.find({})
-      .select("language translationContext")
-      .sort({ language: 1 })
+      .select("name language translationContext")
+      .sort({ name: 1 })
       .lean();
 
     res.status(200).json({
       organizations: orgs.map((org) => ({
         id: String(org._id),
+        name: organizationDisplayName(org),
         language: org.language,
         translationContextPreview: (org.translationContext ?? "").slice(0, 80),
       })),
@@ -73,10 +76,15 @@ export async function createOrganization(
   req: AuthRequest,
   res: Response,
 ): Promise<void> {
+  const name = normalizeOrganizationName(req.body.name);
   const language = normalizeLanguage(req.body.language);
   const translationContext = String(req.body.translationContext ?? "").trim();
   const password = String(req.body.password ?? "");
 
+  if (!name) {
+    res.status(400).json({ message: "Organization_name_required" });
+    return;
+  }
   if (!language) {
     res.status(400).json({ message: "Invalid_language" });
     return;
@@ -88,6 +96,7 @@ export async function createOrganization(
 
   try {
     const org = new Organization({
+      name,
       language,
       translationContext,
       password,
@@ -128,6 +137,15 @@ export async function updateOrganization(
     if (!userCanManageOrganization(user, org)) {
       res.status(403).json({ message: "Organization_edit_forbidden" });
       return;
+    }
+
+    if (req.body.name !== undefined) {
+      const name = normalizeOrganizationName(req.body.name);
+      if (!name) {
+        res.status(400).json({ message: "Organization_name_required" });
+        return;
+      }
+      org.name = name;
     }
 
     if (req.body.language !== undefined) {

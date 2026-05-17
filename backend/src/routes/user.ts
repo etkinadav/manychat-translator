@@ -1,28 +1,20 @@
 import { Router } from "express";
-import { userLogin } from "../controllers/user.controller";
-import {
-  disconnectOrganization,
-  getProfile,
-  updateProfile,
-} from "../controllers/profile.controller";
+import * as UserController from "../controllers/user.controller";
+import * as ProfileController from "../controllers/profile.controller";
 import { checkAuth } from "../middleware/check-auth";
+import { asyncHandler } from "../middleware/async-handler";
 
 const router = Router();
 
-router.post("/login", (req, res) => {
-  void userLogin(req, res);
-});
+router.post("/signup", asyncHandler(UserController.createUser));
+router.post("/login", asyncHandler(UserController.userLogin));
 
-router.get("/profile", checkAuth, (req, res) => {
-  void getProfile(req, res);
-});
-
-router.patch("/profile", checkAuth, (req, res) => {
-  void updateProfile(req, res);
-});
-
-router.post("/organization/disconnect", checkAuth, (req, res) => {
-  void disconnectOrganization(req, res);
-});
+router.get("/profile", checkAuth, asyncHandler(ProfileController.getProfile));
+router.patch("/profile", checkAuth, asyncHandler(ProfileController.updateProfile));
+router.post(
+  "/organization/disconnect",
+  checkAuth,
+  asyncHandler(ProfileController.disconnectOrganization),
+);
 
 export default router;

@@ -16,6 +16,23 @@ manychat-translator/
 └── backend/     # Node + Express + TypeScript API
 ```
 
+### Backend structure (same pattern as beams)
+
+```
+backend/src/
+├── app.ts              # Express app — middleware, routes, static frontend
+├── server.ts           # Listen + MongoDB connect + graceful shutdown
+├── routes/             # Thin routers → controllers
+├── controllers/        # Request handlers
+├── middleware/         # check-auth, cors, error-handler, async-handler
+├── models/             # Mongoose schemas
+├── services/           # Google Translate, language pair, etc.
+├── db/                 # MongoDB connection
+└── types/
+```
+
+`routes/user.ts` wires `UserController` + `ProfileController`; `routes/organizations.ts` → `OrganizationController`; `routes/translate.ts` → `TranslateController`.
+
 ---
 
 ## Run the backend

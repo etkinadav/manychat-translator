@@ -2,6 +2,7 @@ import crypto from "crypto";
 import mongoose, { type Document, type Model, type Types } from "mongoose";
 
 export interface IOrganization extends Document {
+  name: string;
   language: string;
   translationContext: string;
   password: string;
@@ -14,6 +15,11 @@ export interface IOrganizationModel extends Model<IOrganization> {}
 
 const organizationSchema = new mongoose.Schema<IOrganization>(
   {
+    name: {
+      type: String,
+      required: true,
+      trim: true,
+    },
     language: {
       type: String,
       required: true,

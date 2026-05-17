@@ -50,6 +50,20 @@ export class AuthService {
       .pipe(tap((response) => this.saveAuth(response)));
   }
 
+  signup(
+    email: string,
+    password: string,
+    confirmPassword: string,
+  ): Observable<LoginResponse> {
+    return this.http
+      .post<LoginResponse>("/api/user/signup", {
+        email,
+        password,
+        confirmPassword,
+      })
+      .pipe(tap((response) => this.saveAuth(response)));
+  }
+
   logout(): void {
     localStorage.removeItem(AUTH_STORAGE_KEY);
   }
