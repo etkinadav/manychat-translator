@@ -1,5 +1,4 @@
 import type { Response } from "express";
-import { User } from "../models/user";
 import type { AuthRequest } from "../middleware/check-auth";
 import type {
   ErrorResponse,
@@ -18,8 +17,9 @@ import {
   runGeminiOutgoingDryRun,
   runGeminiOutgoingTranslate,
 } from "../services/geminiOutgoingTranslate.service";
+import { detectSubscriberNameGender } from "../services/geminiNameGender.service";
 import { resolveLanguagePairFromProfile } from "../services/translateLanguagePair";
-import { resolveOrganizationField } from "./organization.helpers";
+import { resolveTranslateOrganizationContext } from "./translateOrganizationContext";
 
 /**
  * POST /api/translate — requires JWT; languages from user + organization.
@@ -31,6 +31,40 @@ export async function translateBatch(
   res: Response<TranslateResponse | ErrorResponse>,
 ): Promise<void> {
   const body = req.body as TranslateRequest | undefined;
+
+  if (body?.nameGender === true) {
+    const subscriberName = String(
+      body.subscriberName ?? body.texts?.[0] ?? "",
+    ).trim();
+    if (!subscriberName) {
+      res.status(400).json({ error: "subscriberName is required." });
+      return;
+    }
+
+    try {
+      const ctx = await resolveTranslateOrganizationContext(req, res);
+      if (!ctx) return;
+
+      const { user, org } = ctx;
+      console.log(
+        `[translate] name-gender | user=${String(user._id)} org=${String(org._id)} | lang=${org.language} | name=${subscriberName}`,
+      );
+
+      const nameGender = await detectSubscriberNameGender(
+        subscriberName,
+        org.language,
+      );
+      res.status(200).json({ translations: [], nameGender });
+    } catch (err) {
+      console.error("[translate] name-gender failed:", err);
+      res.status(503).json({
+        error:
+          err instanceof Error ? err.message : "Name gender detection failed",
+      });
+    }
+    return;
+  }
+
   const texts = body?.texts;
 
   if (!Array.isArray(texts)) {
@@ -49,34 +83,9 @@ export async function translateBatch(
   }
 
   try {
-    const user = await User.findById(req.userData!.userId);
-    if (!user) {
-      res.status(404).json({ error: "User_not_found" });
-      return;
-    }
-
-    if (!user.organization) {
-      console.warn(
-        `[translate] rejected: user=${String(user._id)} has no organization`,
-      );
-      res.status(403).json({
-        error:
-          "No organization connected. Connect to an organization in Configuration first.",
-      });
-      return;
-    }
-
-    const org = await resolveOrganizationField(user.organization);
-    if (!org) {
-      console.warn(
-        `[translate] rejected: user=${String(user._id)} organization ref invalid`,
-      );
-      res.status(403).json({
-        error:
-          "No organization connected. Connect to an organization in Configuration first.",
-      });
-      return;
-    }
+    const ctx = await resolveTranslateOrganizationContext(req, res);
+    if (!ctx) return;
+    const { user, org } = ctx;
 
     if (body?.outgoing === true) {
       if (texts.length !== 1) {

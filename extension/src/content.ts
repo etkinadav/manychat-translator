@@ -25,6 +25,7 @@ import {
   type CustomerGender,
 } from "./customer-gender";
 import { initOutgoing, rescanOutgoingComposer } from "./outgoing";
+import { initSubscriberGender, rescanSubscriberGender } from "./subscriber-gender";
 import { fetchSession } from "./session-client";
 
 const LOG_PREFIX = "[ManychatTranslator]";
@@ -552,6 +553,7 @@ function handleUrlChange(newUrl: string): void {
     }
   });
   rescanOutgoingComposer();
+  rescanSubscriberGender();
   for (const delay of POST_NAVIGATION_RESCAN_DELAYS_MS) {
     window.setTimeout(() => {
       const count = scanAndQueue();
@@ -600,6 +602,7 @@ async function boot(): Promise<void> {
   startObserver();
   patchHistory();
   initOutgoing();
+  initSubscriberGender();
 
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== "local") return;
@@ -611,6 +614,7 @@ async function boot(): Promise<void> {
             : "translation disabled — no organization or signed out",
         );
         if (allowed) scanAndQueue();
+        rescanSubscriberGender();
       });
     }
   });

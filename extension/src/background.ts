@@ -43,11 +43,17 @@ interface BgLogoutMessage {
   type: "logout";
 }
 
+interface BgDetectNameGenderMessage {
+  type: "detectNameGender";
+  subscriberName: string;
+}
+
 type BgMessage =
   | BgTranslateMessage
   | BgLoginMessage
   | BgGetSessionMessage
-  | BgLogoutMessage;
+  | BgLogoutMessage
+  | BgDetectNameGenderMessage;
 
 interface ExternalSetAuthMessage {
   type: "SET_AUTH";
@@ -256,6 +262,83 @@ async function handleTranslate(
   }
 }
 
+async function handleDetectNameGender(
+  subscriberName: string,
+): Promise<
+  | { ok: true; nameGender: string }
+  | { ok: false; error: string }
+> {
+  let headers: HeadersInit;
+  try {
+    headers = await authHeaders();
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "Not signed in",
+    };
+  }
+
+  const session = await getSession(false);
+  if (!session.organization) {
+    console.warn("[ManychatTranslator:bg] name-gender blocked — no organization");
+    return { ok: false, error: NO_ORG_ERROR };
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+  try {
+    const res = await fetch(TRANSLATE_URL, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        nameGender: true,
+        subscriberName,
+        texts: [subscriberName],
+      }),
+      signal: controller.signal,
+    });
+
+    const data = (await res.json()) as {
+      nameGender?: string;
+      error?: string;
+      message?: string;
+    };
+
+    if (res.status === 401) {
+      await clearAuth();
+      return { ok: false, error: "Session expired. Sign in again." };
+    }
+    if (res.status === 403) {
+      return {
+        ok: false,
+        error: data.error ?? data.message ?? NO_ORG_ERROR,
+      };
+    }
+    if (!res.ok) {
+      return {
+        ok: false,
+        error: data.error ?? data.message ?? `Backend HTTP ${res.status}`,
+      };
+    }
+
+    const nameGender = data.nameGender?.trim();
+    if (!nameGender) {
+      return { ok: false, error: "Invalid name-gender response" };
+    }
+
+    console.log("[ManychatTranslator:bg] name-gender ok:", nameGender);
+    return { ok: true, nameGender };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 chrome.runtime.onMessage.addListener((message: BgMessage, _sender, sendResponse) => {
   if (message?.type === "login") {
     void handleLogin(message.username, message.password).then(sendResponse);
@@ -273,6 +356,10 @@ chrome.runtime.onMessage.addListener((message: BgMessage, _sender, sendResponse)
   }
   if (message?.type === "translate" && Array.isArray(message.texts)) {
     void handleTranslate(message).then(sendResponse);
+    return true;
+  }
+  if (message?.type === "detectNameGender" && message.subscriberName) {
+    void handleDetectNameGender(message.subscriberName).then(sendResponse);
     return true;
   }
   sendResponse({ ok: false, error: "Invalid message" });

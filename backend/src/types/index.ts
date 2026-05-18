@@ -14,10 +14,20 @@ export interface TranslateRequest {
   incomingGemini?: boolean;
   /** Customer gender for Gemini prompts (extension UI). Default: male. */
   customerGender?: "male" | "female";
+  /** Detect subscriber name gender via Gemini (Manychat header). */
+  nameGender?: boolean;
+  subscriberName?: string;
 }
+
+export type NameGenderCategory =
+  | "male"
+  | "female"
+  | "male or female"
+  | "unknown";
 
 export interface TranslateResponse {
   translations: string[];
+  nameGender?: NameGenderCategory;
   /** True when outgoing Gemini path logged the prompt but did not translate yet. */
   dryRun?: boolean;
   dryRunNote?: string;
