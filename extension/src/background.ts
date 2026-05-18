@@ -119,26 +119,35 @@ async function handleLogin(
   }
 }
 
+const NO_ORG_ERROR =
+  "No organization connected. Open Configuration in the web app and connect to an organization.";
+
 async function handleTranslate(
   message: BgTranslateMessage,
 ): Promise<
   | { ok: true; translations: string[]; dryRun?: boolean; dryRunNote?: string; geminiPrompt?: string }
   | { ok: false; error: string }
 > {
-  const session = await getSession(false);
-  if (!session.organization) {
+  let headers: HeadersInit;
+  try {
+    headers = await authHeaders();
+  } catch (err) {
     return {
       ok: false,
-      error:
-        "No organization connected. Open Configuration in the web app and connect to an organization.",
+      error: err instanceof Error ? err.message : "Not signed in",
     };
+  }
+
+  const session = await getSession(false);
+  if (!session.organization) {
+    console.warn("[ManychatTranslator:bg] translate blocked — no organization");
+    return { ok: false, error: NO_ORG_ERROR };
   }
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
   try {
-    const headers = await authHeaders();
     const res = await fetch(TRANSLATE_URL, {
       method: "POST",
       headers,
@@ -171,6 +180,11 @@ async function handleTranslate(
     if (res.status === 401) {
       await clearAuth();
       return { ok: false, error: "Session expired. Sign in again." };
+    }
+    if (res.status === 403) {
+      const errText = data.error ?? data.message ?? NO_ORG_ERROR;
+      console.warn("[ManychatTranslator:bg] translate forbidden:", errText);
+      return { ok: false, error: errText };
     }
     if (!res.ok) {
       return {

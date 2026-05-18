@@ -132,8 +132,18 @@ function createOutgoingToolbar(): HTMLDivElement {
     void onTranslateClick(btn);
   });
 
-  void readCustomerGender().then((gender) => {
-    toolbar.prepend(createCustomerGenderSelector(gender));
+  void ensureSession().then((session) => {
+    const hasOrg = Boolean(session?.organization);
+    btn.disabled = !hasOrg;
+    void readCustomerGender().then((gender) => {
+      const genderEl = createCustomerGenderSelector(gender);
+      if (!hasOrg) {
+        genderEl.querySelectorAll("input").forEach((input) => {
+          input.disabled = true;
+        });
+      }
+      toolbar.prepend(genderEl);
+    });
   });
 
   toolbar.append(btn);
@@ -369,9 +379,11 @@ function tryInjectComposerToolbar(): boolean {
 
   const toolbar = createOutgoingToolbar();
   textarea.insertAdjacentElement("afterend", toolbar);
-  void ensureSession().then(() => {
+  void ensureSession().then((session) => {
     const btn = toolbar.querySelector<HTMLButtonElement>(`.${BUTTON_CLASS}`);
-    if (btn) btn.textContent = defaultButtonLabel;
+    if (!btn) return;
+    btn.textContent = defaultButtonLabel;
+    btn.disabled = !session?.organization;
   });
   return true;
 }

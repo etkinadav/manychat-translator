@@ -55,8 +55,22 @@ export async function translateBatch(
       return;
     }
 
+    if (!user.organization) {
+      console.warn(
+        `[translate] rejected: user=${String(user._id)} has no organization`,
+      );
+      res.status(403).json({
+        error:
+          "No organization connected. Connect to an organization in Configuration first.",
+      });
+      return;
+    }
+
     const org = await resolveOrganizationField(user.organization);
     if (!org) {
+      console.warn(
+        `[translate] rejected: user=${String(user._id)} organization ref invalid`,
+      );
       res.status(403).json({
         error:
           "No organization connected. Connect to an organization in Configuration first.",

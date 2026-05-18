@@ -25,6 +25,7 @@ import {
   type CustomerGender,
 } from "./customer-gender";
 import { initOutgoing, rescanOutgoingComposer } from "./outgoing";
+import { fetchSession } from "./session-client";
 
 const LOG_PREFIX = "[ManychatTranslator]";
 const log = (...args: unknown[]) => console.log(LOG_PREFIX, ...args);
@@ -82,6 +83,18 @@ const pendingQueue: PendingItem[] = [];
 let rescanTimer: number | null = null;
 let flushTimer: number | null = null;
 let lastUrl = location.href;
+/** False when signed out or user has no connected organization. */
+let translationAllowed = false;
+
+async function refreshTranslationAllowed(): Promise<boolean> {
+  try {
+    const session = await fetchSession(false);
+    translationAllowed = Boolean(session.organization);
+  } catch {
+    translationAllowed = false;
+  }
+  return translationAllowed;
+}
 
 // ---------------------------------------------------------------------------
 // Detection
@@ -142,6 +155,7 @@ function cleanupSkippedBlock(block: Element): void {
  * Returns true if a NEW placeholder was queued, false otherwise.
  */
 function queueForTranslation(textEl: HTMLElement): boolean {
+  if (!translationAllowed) return false;
   if (processedTextNodes.has(textEl)) return false;
   if (textEl.hasAttribute(PROCESSED_ATTR)) {
     processedTextNodes.add(textEl);
@@ -195,6 +209,7 @@ function setStatus(placeholder: HTMLElement, status: TranslationStatus): void {
 }
 
 function scanAndQueue(root: ParentNode = document): number {
+  if (!translationAllowed) return 0;
   const blocks = root.querySelectorAll(MESSAGE_BLOCK_SELECTOR);
   if (blocks.length === 0) return 0;
 
@@ -270,6 +285,18 @@ function scheduleFlush(): void {
 
 async function flushQueue(): Promise<void> {
   if (pendingQueue.length === 0) return;
+
+  if (!translationAllowed) {
+    await refreshTranslationAllowed();
+  }
+  if (!translationAllowed) {
+    const batch = pendingQueue.splice(0, pendingQueue.length);
+    warn(
+      `translation blocked (no organization) — dropped ${batch.length} queued message(s)`,
+    );
+    return;
+  }
+
   const batch = pendingQueue.splice(0, pendingQueue.length);
   const texts = batch.map((b) => b.text);
 
@@ -374,6 +401,14 @@ async function onIncomingGeminiClick(
   btn: HTMLButtonElement,
 ): Promise<void> {
   if (placeholder.hasAttribute(GEMINI_DONE_ATTR)) return;
+
+  if (!translationAllowed) {
+    await refreshTranslationAllowed();
+  }
+  if (!translationAllowed) {
+    warn("incoming Gemini blocked — no organization connected");
+    return;
+  }
 
   const sourceText = getSourceTextForPlaceholder(placeholder);
   if (!sourceText) {
@@ -511,6 +546,11 @@ function startObserver(): void {
 function handleUrlChange(newUrl: string): void {
   log(`URL change detected: ${lastUrl} -> ${newUrl}`);
   lastUrl = newUrl;
+  void refreshTranslationAllowed().then((allowed) => {
+    if (!allowed) {
+      log("translation disabled — no organization connected");
+    }
+  });
   rescanOutgoingComposer();
   for (const delay of POST_NAVIGATION_RESCAN_DELAYS_MS) {
     window.setTimeout(() => {
@@ -550,19 +590,38 @@ function patchHistory(): void {
 // Boot
 // ---------------------------------------------------------------------------
 
-function boot(): void {
+async function boot(): Promise<void> {
   log("extension loaded on", location.href);
+  await refreshTranslationAllowed();
+  if (!translationAllowed) {
+    log("incoming translation disabled — connect to an organization in Configuration");
+  }
   scanAndQueue();
   startObserver();
   patchHistory();
   initOutgoing();
+
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== "local") return;
+    if (changes["mct-session"] || changes["mct-auth"]) {
+      void refreshTranslationAllowed().then((allowed) => {
+        log(
+          allowed
+            ? "translation enabled — organization connected"
+            : "translation disabled — no organization or signed out",
+        );
+        if (allowed) scanAndQueue();
+      });
+    }
+  });
+
   for (const delay of POST_NAVIGATION_RESCAN_DELAYS_MS) {
     window.setTimeout(() => scanAndQueue(), delay);
   }
 }
 
 if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", boot, { once: true });
+  document.addEventListener("DOMContentLoaded", () => void boot(), { once: true });
 } else {
-  boot();
+  void boot();
 }
