@@ -15,7 +15,7 @@ const API_BASE = "http://localhost:3000";
 const TRANSLATE_URL = `${API_BASE}/api/translate`;
 const PROFILE_URL = `${API_BASE}/api/user/profile`;
 const LOGIN_URL = `${API_BASE}/api/user/login`;
-const REQUEST_TIMEOUT_MS = 8000;
+const REQUEST_TIMEOUT_MS = 20000;
 const SESSION_MAX_AGE_MS = 5 * 60 * 1000;
 
 let sessionLoadedAt = 0;
@@ -24,6 +24,7 @@ interface BgTranslateMessage {
   type: "translate";
   texts: string[];
   outgoing?: boolean;
+  incomingGemini?: boolean;
   customerGender?: "male" | "female";
 }
 
@@ -148,7 +149,12 @@ async function handleTranslate(
               outgoing: true,
               customerGender: message.customerGender ?? "male",
             }
-          : {}),
+          : message.incomingGemini
+            ? {
+                incomingGemini: true,
+                customerGender: message.customerGender ?? "male",
+              }
+            : {}),
       }),
       signal: controller.signal,
     });
@@ -203,9 +209,9 @@ async function handleTranslate(
       };
     }
 
-    if (message.outgoing && data.geminiPrompt) {
+    if ((message.outgoing || message.incomingGemini) && data.geminiPrompt) {
       console.log(
-        "[ManychatTranslator:bg] Gemini prompt sent (also in backend terminal):",
+        `[ManychatTranslator:bg] Gemini prompt sent (${message.incomingGemini ? "incoming" : "outgoing"}):`,
       );
       console.log(
         "[ManychatTranslator:bg] ========== GEMINI PROMPT ==========\n",

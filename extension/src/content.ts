@@ -20,6 +20,10 @@
  *   - MutationObserver explicitly ignores our injected nodes
  */
 
+import {
+  readCustomerGender,
+  type CustomerGender,
+} from "./customer-gender";
 import { initOutgoing, rescanOutgoingComposer } from "./outgoing";
 
 const LOG_PREFIX = "[ManychatTranslator]";
@@ -49,6 +53,10 @@ const PROCESSED_ATTR = "data-ai-processed";
 const TRANSLATION_ATTR = "data-ai-translated";
 const STATUS_ATTR = "data-ai-translation-status";
 const TRANSLATION_CLASS = "mc-ai-translation";
+const SOURCE_TEXT_ATTR = "data-mc-source-text";
+const GEMINI_BTN_CLASS = "mc-ai-gemini-btn";
+const GEMINI_RESULT_CLASS = "mc-ai-gemini-result";
+const GEMINI_DONE_ATTR = "data-mc-gemini-done";
 
 type TranslationStatus = "queued" | "loading" | "done" | "error";
 
@@ -174,6 +182,7 @@ function queueForTranslation(textEl: HTMLElement): boolean {
 
   textEl.setAttribute(PROCESSED_ATTR, "true");
   processedTextNodes.add(textEl);
+  placeholder.setAttribute(SOURCE_TEXT_ATTR, originalText);
 
   pendingQueue.push({ text: originalText, placeholder });
   log(`message queued (queue size=${pendingQueue.length})`);
@@ -215,6 +224,15 @@ interface CsTranslateReply {
   ok: boolean;
   translations?: string[];
   error?: string;
+  geminiPrompt?: string;
+}
+
+function logGeminiPromptInPage(prompt: string, direction: "incoming" | "outgoing"): void {
+  console.log(
+    `%c[ManychatTranslator] GEMINI PROMPT (${direction})`,
+    "font-weight:bold;color:#2563eb",
+  );
+  console.log(prompt);
 }
 
 /** Ask the MV3 service worker to call the backend (no page-origin CORS). */
@@ -281,9 +299,142 @@ async function flushQueue(): Promise<void> {
 // DOM update
 // ---------------------------------------------------------------------------
 
+function getSourceTextForPlaceholder(placeholder: HTMLElement): string {
+  const stored = placeholder.getAttribute(SOURCE_TEXT_ATTR);
+  if (stored?.trim()) return stored.trim();
+  const prev = placeholder.previousElementSibling;
+  return (prev?.textContent ?? "").trim();
+}
+
+function createGeminiButton(placeholder: HTMLElement): HTMLButtonElement {
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = GEMINI_BTN_CLASS;
+  btn.title = "Retranslate with AI (Gemini)";
+  btn.setAttribute("aria-label", "AI translation");
+  btn.textContent = "AI";
+  btn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    void onIncomingGeminiClick(placeholder, btn);
+  });
+  return btn;
+}
+
+function ensureGeminiResultElement(placeholder: HTMLElement): HTMLElement {
+  const next = placeholder.nextElementSibling;
+  if (
+    next instanceof HTMLElement &&
+    next.classList.contains(GEMINI_RESULT_CLASS)
+  ) {
+    return next;
+  }
+  const el = document.createElement("div");
+  el.className = GEMINI_RESULT_CLASS;
+  placeholder.insertAdjacentElement("afterend", el);
+  return el;
+}
+
+function postTranslateIncomingGemini(
+  text: string,
+  customerGender: CustomerGender,
+): Promise<{ translation: string; geminiPrompt?: string }> {
+  return new Promise((resolve, reject) => {
+    const timeout = window.setTimeout(
+      () => reject(new Error("backend request timed out")),
+      REQUEST_TIMEOUT_MS,
+    );
+    chrome.runtime.sendMessage(
+      {
+        type: "translate",
+        texts: [text],
+        incomingGemini: true,
+        customerGender,
+      },
+      (response: CsTranslateReply | undefined) => {
+        window.clearTimeout(timeout);
+        if (chrome.runtime.lastError) {
+          reject(new Error(chrome.runtime.lastError.message));
+          return;
+        }
+        if (!response?.ok || !response.translations?.[0]) {
+          reject(new Error(response?.error ?? "backend request failed"));
+          return;
+        }
+        resolve({
+          translation: response.translations[0],
+          geminiPrompt: response.geminiPrompt,
+        });
+      },
+    );
+  });
+}
+
+async function onIncomingGeminiClick(
+  placeholder: HTMLElement,
+  btn: HTMLButtonElement,
+): Promise<void> {
+  if (placeholder.hasAttribute(GEMINI_DONE_ATTR)) return;
+
+  const sourceText = getSourceTextForPlaceholder(placeholder);
+  if (!sourceText) {
+    warn("incoming Gemini: no source text");
+    return;
+  }
+
+  const customerGender = await readCustomerGender();
+  const resultEl = ensureGeminiResultElement(placeholder);
+
+  btn.disabled = true;
+  btn.classList.add("loading");
+  resultEl.className = `${GEMINI_RESULT_CLASS} loading`;
+  resultEl.textContent = "AI translating…";
+
+  log("incoming Gemini requested", {
+    chars: sourceText.length,
+    customerGender,
+  });
+
+  try {
+    const { translation, geminiPrompt } = await postTranslateIncomingGemini(
+      sourceText,
+      customerGender,
+    );
+    if (geminiPrompt) {
+      logGeminiPromptInPage(geminiPrompt, "incoming");
+    }
+
+    resultEl.classList.remove("loading");
+    resultEl.textContent = translation.trim();
+    placeholder.setAttribute(GEMINI_DONE_ATTR, "true");
+    btn.classList.remove("loading");
+    btn.classList.add("done");
+    btn.disabled = true;
+    log("incoming Gemini translation applied");
+  } catch (err) {
+    btn.disabled = false;
+    btn.classList.remove("loading");
+    resultEl.classList.remove("loading");
+    resultEl.classList.add("error");
+    resultEl.textContent =
+      err instanceof Error ? err.message : "AI translation failed";
+    warn("incoming Gemini failed:", err);
+  }
+}
+
 function applyTranslation(placeholder: HTMLElement, text: string): void {
   placeholder.classList.remove("loading", "error");
-  placeholder.textContent = text;
+  placeholder.innerHTML = "";
+
+  const row = document.createElement("div");
+  row.className = "mc-ai-translation-row";
+
+  const googleText = document.createElement("span");
+  googleText.className = "mc-ai-google-text";
+  googleText.textContent = text;
+
+  row.append(googleText, createGeminiButton(placeholder));
+  placeholder.append(row);
+
   setStatus(placeholder, "done");
   void placeholder.offsetWidth;
   placeholder.classList.add("updated");
@@ -317,11 +468,19 @@ function isRelevantMutation(mutation: MutationRecord): boolean {
   const target = mutation.target as Element | null;
   if (target?.classList?.contains(TRANSLATION_CLASS)) return false;
   if (target?.closest?.(`.${TRANSLATION_CLASS}`)) return false;
+  if (target?.closest?.(`.${GEMINI_BTN_CLASS}, .${GEMINI_RESULT_CLASS}`)) {
+    return false;
+  }
 
   if (mutation.type === "childList") {
     for (const node of Array.from(mutation.addedNodes)) {
       if (!(node instanceof Element)) continue;
-      if (node.classList.contains(TRANSLATION_CLASS)) continue;
+      if (
+        node.classList.contains(TRANSLATION_CLASS) ||
+        node.classList.contains(GEMINI_RESULT_CLASS)
+      ) {
+        continue;
+      }
       return true;
     }
     return false;

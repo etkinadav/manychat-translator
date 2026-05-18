@@ -43,6 +43,7 @@ function buildOutgoingGeminiPayload(
     targetLanguageCode: target,
     organizationName: organizationDisplayName(org),
     organizationContext: org.translationContext ?? "",
+    organizationTerms: Array.isArray(org.terms) ? org.terms : [],
     agentGender: (user.gender || "") as "" | "male" | "female",
     customerGender,
   });

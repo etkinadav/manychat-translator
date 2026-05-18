@@ -10,7 +10,9 @@ export interface TranslateRequest {
    * Languages are resolved on the server from the authenticated profile.
    */
   outgoing?: boolean;
-  /** Customer gender for outgoing Gemini (extension UI). Default: male. */
+  /** Per-message incoming customer text → Gemini (extension AI button). */
+  incomingGemini?: boolean;
+  /** Customer gender for Gemini prompts (extension UI). Default: male. */
   customerGender?: "male" | "female";
 }
 

@@ -13,6 +13,7 @@ import {
 } from "../services/googleTranslate.service";
 import { parseCustomerGender } from "../services/customerGender";
 import { isGeminiOutgoingDryRunEnabled } from "../services/geminiOutgoingPrompt.service";
+import { runGeminiIncomingTranslate } from "../services/geminiIncomingTranslate.service";
 import {
   runGeminiOutgoingDryRun,
   runGeminiOutgoingTranslate,
@@ -22,7 +23,7 @@ import { resolveOrganizationField } from "./organization.helpers";
 
 /**
  * POST /api/translate — requires JWT; languages from user + organization.
- * Incoming chat → Google Translate.
+ * Incoming chat batch → Google Translate; per-message AI → Gemini (incomingGemini).
  * Outgoing composer → Vertex AI Gemini (optional dry-run via GEMINI_OUTGOING_DRY_RUN=true).
  */
 export async function translateBatch(
@@ -112,6 +113,38 @@ export async function translateBatch(
       return;
     }
 
+    if (body?.incomingGemini === true) {
+      if (texts.length !== 1) {
+        res.status(400).json({
+          error: "Incoming Gemini translation supports exactly one message at a time.",
+        });
+        return;
+      }
+
+      const messageText = texts[0] ?? "";
+      if (!messageText.trim()) {
+        res.status(400).json({ error: "Message text is empty." });
+        return;
+      }
+
+      const customerGender = parseCustomerGender(body?.customerGender);
+      console.log(
+        `[translate] incoming-gemini | user=${String(user._id)} org=${String(org._id)} | customer=${customerGender} | chars=${messageText.length}`,
+      );
+
+      const geminiResult = await runGeminiIncomingTranslate(
+        user,
+        org,
+        messageText,
+        customerGender,
+      );
+      res.status(200).json({
+        translations: geminiResult.translations,
+        geminiPrompt: geminiResult.geminiPrompt,
+      });
+      return;
+    }
+
     const { source: sourceLanguage, target: targetLanguage } =
       resolveLanguagePairFromProfile({
         userLanguage: user.language || "en",
@@ -121,7 +154,7 @@ export async function translateBatch(
 
     const totalChars = texts.reduce((sum, t) => sum + t.length, 0);
     console.log(
-      `[translate] incoming | user=${String(user._id)} org=${String(org._id)} | ${sourceLanguage} -> ${targetLanguage} | count=${texts.length} | chars=${totalChars}`,
+      `[translate] incoming | user=${String(user._id)} org=${String(org._id)} | Google | ${sourceLanguage} -> ${targetLanguage} | count=${texts.length} | chars=${totalChars}`,
     );
 
     const translations = await translateTexts(

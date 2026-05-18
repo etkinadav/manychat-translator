@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 import { Organization } from "../models/organization";
 import { User } from "../models/user";
 import type { AuthRequest } from "../middleware/check-auth";
+import { normalizeOrganizationTerms } from "../services/organizationTerms";
 import {
   formatOrganization,
   formatOrganizationPublic,
@@ -80,6 +81,7 @@ export async function createOrganization(
   const name = normalizeOrganizationName(req.body.name);
   const language = normalizeLanguage(req.body.language);
   const translationContext = String(req.body.translationContext ?? "").trim();
+  const terms = normalizeOrganizationTerms(req.body.terms);
   const password = String(req.body.password ?? "");
 
   if (!name) {
@@ -100,6 +102,7 @@ export async function createOrganization(
       name,
       language,
       translationContext,
+      terms,
       password,
       createdBy: req.userData!.userId,
     });
@@ -160,6 +163,10 @@ export async function updateOrganization(
 
     if (req.body.translationContext !== undefined) {
       org.translationContext = String(req.body.translationContext ?? "").trim();
+    }
+
+    if (req.body.terms !== undefined) {
+      org.terms = normalizeOrganizationTerms(req.body.terms);
     }
 
     const newPassword = String(req.body.password ?? "").trim();

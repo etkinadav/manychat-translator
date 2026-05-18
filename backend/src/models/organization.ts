@@ -1,10 +1,12 @@
 import crypto from "crypto";
 import mongoose, { type Document, type Model, type Types } from "mongoose";
+import type { OrganizationTermCategory } from "../types/organizationTerms";
 
 export interface IOrganization extends Document {
   name: string;
   language: string;
   translationContext: string;
+  terms: OrganizationTermCategory[];
   password: string;
   salt?: string;
   createdBy?: Types.ObjectId | null;
@@ -30,6 +32,31 @@ const organizationSchema = new mongoose.Schema<IOrganization>(
       type: String,
       default: "",
       trim: true,
+    },
+    terms: {
+      type: [
+        {
+          name: { type: String, required: true, trim: true },
+          terms: {
+            type: [
+              {
+                name: { type: String, required: true, trim: true },
+                description: { type: String, default: "", trim: true },
+                interpretations: {
+                  type: [
+                    {
+                      text: { type: String, default: "", trim: true },
+                    },
+                  ],
+                  default: [],
+                },
+              },
+            ],
+            default: [],
+          },
+        },
+      ],
+      default: [],
     },
     password: { type: String, required: true },
     salt: { type: String },

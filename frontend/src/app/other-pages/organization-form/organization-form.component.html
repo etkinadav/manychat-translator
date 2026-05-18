@@ -1,4 +1,4 @@
-<div class="config-shell">
+<div class="config-shell config-shell--wide">
   <div class="config-header">
     <h1>{{ isEdit ? "Edit organization" : "Create organization" }}</h1>
     <button type="button" class="btn-secondary" (click)="back()">
@@ -67,6 +67,130 @@
             Agents must enter this password to connect to the organization.
           </p>
         </div>
+      </section>
+
+      <section class="config-section terms-section">
+        <div class="terms-section__header">
+          <h2>Terms glossary</h2>
+          <button type="button" class="btn-secondary" (click)="addCategory()">
+            Add category
+          </button>
+        </div>
+        <p class="field-hint terms-section__intro">
+          Optional categories of terms with descriptions and interpretations. Not
+          used by translation yet — stored for this organization only.
+        </p>
+
+        <p class="muted" *ngIf="terms.length === 0">No categories yet.</p>
+
+        <article
+          class="term-category"
+          *ngFor="let category of terms; let ci = index; trackBy: trackByIndex"
+        >
+          <div class="term-category__header">
+            <div class="field term-category__name">
+              <label [for]="'cat-name-' + ci">Category name</label>
+              <input
+                [id]="'cat-name-' + ci"
+                type="text"
+                maxlength="120"
+                [(ngModel)]="category.name"
+                [name]="'cat-name-' + ci"
+              />
+            </div>
+            <button
+              type="button"
+              class="btn-danger btn-small"
+              (click)="removeCategory(ci)"
+            >
+              Remove category
+            </button>
+          </div>
+
+          <p class="muted" *ngIf="category.terms.length === 0">No terms in this category.</p>
+
+          <div
+            class="term-item"
+            *ngFor="let term of category.terms; let ti = index; trackBy: trackByIndex"
+          >
+            <div class="term-item__header">
+              <h3>Term {{ ti + 1 }}</h3>
+              <button
+                type="button"
+                class="btn-danger btn-small"
+                (click)="removeTerm(ci, ti)"
+              >
+                Remove term
+              </button>
+            </div>
+            <div class="field">
+              <label [for]="'term-name-' + ci + '-' + ti">Term name</label>
+              <input
+                [id]="'term-name-' + ci + '-' + ti"
+                type="text"
+                maxlength="120"
+                [(ngModel)]="term.name"
+                [name]="'term-name-' + ci + '-' + ti"
+              />
+            </div>
+            <div class="field">
+              <label [for]="'term-desc-' + ci + '-' + ti">Description</label>
+              <textarea
+                [id]="'term-desc-' + ci + '-' + ti"
+                rows="2"
+                maxlength="2000"
+                [(ngModel)]="term.description"
+                [name]="'term-desc-' + ci + '-' + ti"
+              ></textarea>
+            </div>
+            <div class="interpretations-block">
+              <div class="interpretations-block__header">
+                <span class="interpretations-block__label">Interpretations</span>
+                <button
+                  type="button"
+                  class="btn-secondary btn-small"
+                  (click)="addInterpretation(ci, ti)"
+                >
+                  Add interpretation
+                </button>
+              </div>
+              <p class="muted" *ngIf="term.interpretations.length === 0">
+                No interpretations.
+              </p>
+              <div
+                class="interpretation-row"
+                *ngFor="
+                  let interp of term.interpretations;
+                  let ii = index;
+                  trackBy: trackByIndex
+                "
+              >
+                <input
+                  type="text"
+                  maxlength="500"
+                  placeholder="Interpretation"
+                  [(ngModel)]="interp.text"
+                  [name]="'interp-' + ci + '-' + ti + '-' + ii"
+                />
+                <button
+                  type="button"
+                  class="btn-danger btn-small"
+                  (click)="removeInterpretation(ci, ti, ii)"
+                  [disabled]="term.interpretations.length <= 1"
+                >
+                  Remove
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <button type="button" class="btn-secondary" (click)="addTerm(ci)">
+            Add term
+          </button>
+        </article>
+      </section>
+
+      <section class="config-section config-section--submit">
         <button type="submit">
           {{ isEdit ? "Save changes" : "Create organization" }}
         </button>

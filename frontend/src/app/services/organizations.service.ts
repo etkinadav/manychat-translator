@@ -4,6 +4,7 @@ import { Observable } from "rxjs";
 import type {
   OrganizationDetails,
   OrganizationSummary,
+  OrganizationTermCategory,
 } from "../models/organization.model";
 import type { UserProfile } from "../models/user-profile.model";
 
@@ -27,6 +28,7 @@ export class OrganizationsService {
     name: string;
     language: string;
     translationContext: string;
+    terms: OrganizationTermCategory[];
     password: string;
   }): Observable<{ organization: OrganizationDetails }> {
     return this.http.post<{ organization: OrganizationDetails }>(
@@ -41,6 +43,7 @@ export class OrganizationsService {
       name: string;
       language: string;
       translationContext: string;
+      terms: OrganizationTermCategory[];
       password?: string;
     },
   ): Observable<{ organization: OrganizationDetails }> {

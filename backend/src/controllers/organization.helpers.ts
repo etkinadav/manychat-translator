@@ -24,6 +24,10 @@ export function organizationDisplayName(org: {
   return org.language.toUpperCase();
 }
 
+function formatTerms(org: IOrganization) {
+  return Array.isArray(org.terms) ? org.terms : [];
+}
+
 export function formatOrganization(org: IOrganization | null) {
   if (!org) return null;
   return {
@@ -31,6 +35,7 @@ export function formatOrganization(org: IOrganization | null) {
     name: organizationDisplayName(org),
     language: org.language,
     translationContext: org.translationContext ?? "",
+    terms: formatTerms(org),
   };
 }
 
@@ -40,6 +45,7 @@ export function formatOrganizationPublic(org: IOrganization) {
     name: organizationDisplayName(org),
     language: org.language,
     translationContext: org.translationContext ?? "",
+    terms: formatTerms(org),
   };
 }
 

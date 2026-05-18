@@ -11,6 +11,88 @@
 /* Base translation block                                                  */
 /* ──────────────────────────────────────────────────────────────────────── */
 
+.mc-ai-translation-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  width: 100%;
+}
+
+.mc-ai-google-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.mc-ai-gemini-btn {
+  flex-shrink: 0;
+  margin: 0;
+  padding: 2px 6px;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: 0.02em;
+  font-family: inherit;
+  color: #1d4ed8;
+  background: rgba(37, 99, 235, 0.1);
+  border: 1px solid rgba(37, 99, 235, 0.35);
+  border-radius: 4px;
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    opacity 0.15s ease;
+}
+
+.mc-ai-gemini-btn:hover:not(:disabled) {
+  background: rgba(37, 99, 235, 0.18);
+}
+
+.mc-ai-gemini-btn:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.mc-ai-gemini-btn.loading {
+  opacity: 0.7;
+  cursor: wait;
+}
+
+.mc-ai-gemini-btn.done {
+  color: #15803d;
+  border-color: rgba(21, 128, 61, 0.35);
+  background: rgba(21, 128, 61, 0.1);
+}
+
+.mc-ai-gemini-result {
+  display: block;
+  margin-top: 4px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  font-size: 0.9em;
+  font-weight: 700;
+  line-height: 1.35;
+  color: inherit;
+  background: rgba(37, 99, 235, 0.08);
+  white-space: pre-wrap;
+  word-break: break-word;
+  direction: ltr;
+  text-align: left;
+  unicode-bidi: isolate;
+  box-sizing: border-box;
+  max-width: 100%;
+}
+
+.mc-ai-gemini-result.loading {
+  font-weight: 500;
+  font-style: italic;
+  opacity: 0.85;
+}
+
+.mc-ai-gemini-result.error {
+  font-weight: 500;
+  color: #b3261e;
+  background: rgba(255, 0, 0, 0.08);
+}
+
 .mc-ai-translation {
   display: block;
   position: relative;
