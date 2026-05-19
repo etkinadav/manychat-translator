@@ -2,12 +2,22 @@
  * Outgoing composer translation — user language → organization language.
  */
 
+import {
+  AUTO_TRANSLATE_STORAGE_KEY,
+  readAutoTranslateEnabled,
+  writeAutoTranslateEnabled,
+} from "./auto-translate";
 import { translateToButtonLabel } from "./constants/languages";
 import {
   readCustomerGender,
   writeCustomerGender,
   type CustomerGender,
 } from "./customer-gender";
+import {
+  collectConversationTranscript,
+  removeConversationSummary,
+  showConversationSummary,
+} from "./chat-transcript";
 import { fetchSession } from "./session-client";
 import type { ExtensionSession } from "./types";
 
@@ -21,8 +31,13 @@ const TOOLBAR_ATTR = "data-mc-outgoing-toolbar";
 const BUTTON_ATTR = "data-mc-translate-outgoing";
 const GENDER_ATTR = "data-mc-customer-gender";
 const BUTTON_CLASS = "mc-translate-to-hebrew-btn";
+const SUMMARY_BTN_CLASS = "mc-conversation-summary-btn";
+const SUMMARY_BTN_ATTR = "data-mc-summary-toolbar-btn";
+const AUTO_TRANSLATE_BTN_CLASS = "mc-auto-translate-toggle";
+const AUTO_TRANSLATE_BTN_ATTR = "data-mc-auto-translate-toggle";
 
 const LABEL_LOADING = "Translating...";
+const LABEL_SUMMARY_LOADING = "Summarizing...";
 const LABEL_SUCCESS = "Translated ✓";
 const LABEL_ERROR = "Translation failed";
 const LABEL_DRY_RUN = "Dry run — see console";
@@ -75,7 +90,196 @@ function findToolbarForTextarea(textarea: HTMLTextAreaElement): HTMLElement | nu
   if (next instanceof HTMLElement && next.hasAttribute(TOOLBAR_ATTR)) {
     return next;
   }
-  return document.querySelector<HTMLElement>(`[${TOOLBAR_ATTR}="true"]`);
+  return null;
+}
+
+function removeOrphanedToolbars(activeTextarea: HTMLTextAreaElement): void {
+  for (const toolbar of document.querySelectorAll<HTMLElement>(
+    `[${TOOLBAR_ATTR}="true"]`,
+  )) {
+    if (toolbar.previousElementSibling !== activeTextarea) {
+      toolbar.remove();
+    }
+  }
+}
+
+function syncToolbarSession(toolbar: HTMLElement): void {
+  void ensureSession().then((session) => {
+    const hasOrg = Boolean(session?.organization);
+    const translateBtn = toolbar.querySelector<HTMLButtonElement>(
+      `.${BUTTON_CLASS}`,
+    );
+    const summaryBtn = toolbar.querySelector<HTMLButtonElement>(
+      `.${SUMMARY_BTN_CLASS}`,
+    );
+    const autoBtn = toolbar.querySelector<HTMLButtonElement>(
+      `.${AUTO_TRANSLATE_BTN_CLASS}`,
+    );
+    if (translateBtn) {
+      translateBtn.textContent = defaultButtonLabel;
+      translateBtn.disabled = !hasOrg;
+    }
+    if (summaryBtn) summaryBtn.disabled = !hasOrg;
+    if (autoBtn) autoBtn.disabled = !hasOrg;
+    syncAutoTranslateToggle(toolbar);
+  });
+}
+
+function ensureToolbarButtons(toolbar: HTMLElement): void {
+  if (!toolbar.querySelector(`.${AUTO_TRANSLATE_BTN_CLASS}`)) {
+    toolbar.prepend(createAutoTranslateToggle());
+  }
+  if (!toolbar.querySelector(`.${BUTTON_CLASS}`)) {
+    const btn = createTranslateButton();
+    btn.addEventListener("click", () => {
+      void onTranslateClick(btn);
+    });
+    const autoBtn = toolbar.querySelector(`.${AUTO_TRANSLATE_BTN_CLASS}`);
+    if (autoBtn) autoBtn.insertAdjacentElement("afterend", btn);
+    else toolbar.append(btn);
+  }
+  if (!toolbar.querySelector(`.${SUMMARY_BTN_CLASS}`)) {
+    toolbar.append(createSummaryButton());
+  }
+}
+
+interface ConversationSummaryReply {
+  ok: boolean;
+  conversationSummary?: string;
+  error?: string;
+}
+
+function postConversationSummary(transcript: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    chrome.runtime.sendMessage(
+      {
+        type: "conversationSummary",
+        conversationTranscript: transcript,
+      },
+      (response: ConversationSummaryReply | undefined) => {
+        if (chrome.runtime.lastError) {
+          reject(new Error(chrome.runtime.lastError.message));
+          return;
+        }
+        if (!response?.ok || !response.conversationSummary) {
+          reject(new Error(response?.error ?? "conversation summary failed"));
+          return;
+        }
+        resolve(response.conversationSummary);
+      },
+    );
+  });
+}
+
+function applyAutoTranslateButtonState(
+  btn: HTMLButtonElement,
+  enabled: boolean,
+): void {
+  btn.classList.toggle("active", enabled);
+  btn.setAttribute("aria-pressed", enabled ? "true" : "false");
+  btn.textContent = enabled ? "auto" : "off";
+  btn.title = enabled
+    ? "Automatic chat translation is on (click to turn off)"
+    : "Automatic chat translation is off (click to turn on)";
+}
+
+function createAutoTranslateToggle(): HTMLButtonElement {
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = AUTO_TRANSLATE_BTN_CLASS;
+  btn.setAttribute(AUTO_TRANSLATE_BTN_ATTR, "true");
+  applyAutoTranslateButtonState(btn, true);
+  btn.addEventListener("click", () => {
+    void (async () => {
+      const enabled = await readAutoTranslateEnabled();
+      const next = !enabled;
+      await writeAutoTranslateEnabled(next);
+      applyAutoTranslateButtonState(btn, next);
+    })();
+  });
+  void readAutoTranslateEnabled().then((enabled) => {
+    applyAutoTranslateButtonState(btn, enabled);
+  });
+  return btn;
+}
+
+function syncAutoTranslateToggle(toolbar: HTMLElement): void {
+  const btn = toolbar.querySelector<HTMLButtonElement>(
+    `.${AUTO_TRANSLATE_BTN_CLASS}`,
+  );
+  if (!btn) return;
+  void readAutoTranslateEnabled().then((enabled) => {
+    applyAutoTranslateButtonState(btn, enabled);
+  });
+}
+
+function createSummaryButton(): HTMLButtonElement {
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = SUMMARY_BTN_CLASS;
+  btn.setAttribute(SUMMARY_BTN_ATTR, "true");
+  btn.textContent = "summery";
+  btn.title = "Summarize translated conversation (Gemini)";
+  btn.addEventListener("click", () => {
+    void onConversationSummaryClick(btn);
+  });
+  return btn;
+}
+
+async function onConversationSummaryClick(btn: HTMLButtonElement): Promise<void> {
+  const session = await ensureSession();
+  if (!session?.organization) {
+    btn.classList.add("error");
+    btn.textContent = "No org";
+    window.setTimeout(() => {
+      btn.classList.remove("error");
+      btn.textContent = "summery";
+    }, ERROR_RESET_MS);
+    return;
+  }
+
+  const transcript = await collectConversationTranscript();
+  if (!transcript) {
+    btn.classList.add("error");
+    btn.textContent = "No messages";
+    window.setTimeout(() => {
+      btn.classList.remove("error");
+      btn.textContent = "summery";
+    }, ERROR_RESET_MS);
+    return;
+  }
+
+  const prevLabel = btn.textContent;
+  btn.disabled = true;
+  btn.classList.add("loading");
+  btn.textContent = LABEL_SUMMARY_LOADING;
+  removeConversationSummary();
+
+  log("conversation summary requested", { chars: transcript.length });
+
+  try {
+    const summary = await postConversationSummary(transcript);
+    showConversationSummary(summary);
+    ensureComposerToolbar();
+    btn.classList.remove("loading");
+    btn.classList.add("success");
+    btn.textContent = "Summary ✓";
+    window.setTimeout(() => {
+      btn.classList.remove("success");
+      btn.textContent = prevLabel ?? "summery";
+      btn.disabled = false;
+    }, SUCCESS_RESET_MS * 2);
+  } catch (err) {
+    warn("conversation summary failed:", err);
+    btn.classList.remove("loading");
+    btn.classList.add("error");
+    btn.textContent = "Summary failed";
+    window.setTimeout(() => {
+      btn.classList.remove("error");
+      btn.textContent = prevLabel ?? "summery";
+      btn.disabled = false;
+    }, ERROR_RESET_MS);
+  }
 }
 
 function createTranslateButton(): HTMLButtonElement {
@@ -132,9 +336,14 @@ function createOutgoingToolbar(): HTMLDivElement {
     void onTranslateClick(btn);
   });
 
+  const summaryBtn = createSummaryButton();
+  const autoBtn = createAutoTranslateToggle();
+
   void ensureSession().then((session) => {
     const hasOrg = Boolean(session?.organization);
     btn.disabled = !hasOrg;
+    summaryBtn.disabled = !hasOrg;
+    autoBtn.disabled = !hasOrg;
     void readCustomerGender().then((gender) => {
       const genderEl = createCustomerGenderSelector(gender);
       if (!hasOrg) {
@@ -146,7 +355,7 @@ function createOutgoingToolbar(): HTMLDivElement {
     });
   });
 
-  toolbar.append(btn);
+  toolbar.append(autoBtn, btn, summaryBtn);
   return toolbar;
 }
 
@@ -372,33 +581,44 @@ async function onTranslateClick(btn: HTMLButtonElement): Promise<void> {
   }
 }
 
-function tryInjectComposerToolbar(): boolean {
+function ensureComposerToolbar(): boolean {
   const textarea = findComposerTextarea();
   if (!textarea) return false;
-  if (findToolbarForTextarea(textarea)) return false;
+
+  removeOrphanedToolbars(textarea);
+
+  const existing = findToolbarForTextarea(textarea);
+  if (existing) {
+    ensureToolbarButtons(existing);
+    syncToolbarSession(existing);
+    return true;
+  }
 
   const toolbar = createOutgoingToolbar();
   textarea.insertAdjacentElement("afterend", toolbar);
-  void ensureSession().then((session) => {
-    const btn = toolbar.querySelector<HTMLButtonElement>(`.${BUTTON_CLASS}`);
-    if (!btn) return;
-    btn.textContent = defaultButtonLabel;
-    btn.disabled = !session?.organization;
-  });
+  syncToolbarSession(toolbar);
   return true;
 }
 
 function isRelevantOutgoingMutation(mutation: MutationRecord): boolean {
   const target = mutation.target as Element | null;
-  if (target?.closest?.(`.${BUTTON_CLASS}, .mc-outgoing-toolbar`)) {
+  if (
+    target?.closest?.(
+      `.${BUTTON_CLASS}, .${SUMMARY_BTN_CLASS}, .${AUTO_TRANSLATE_BTN_CLASS}, .mc-outgoing-toolbar`,
+    )
+  ) {
     return false;
   }
   if (mutation.type === "childList") {
     for (const node of Array.from(mutation.addedNodes)) {
       if (!(node instanceof Element)) continue;
       if (
-        node.matches?.(`.${BUTTON_CLASS}, .mc-outgoing-toolbar`) ||
-        node.querySelector?.(`.${BUTTON_CLASS}, .mc-outgoing-toolbar`)
+        node.matches?.(
+          `.${BUTTON_CLASS}, .${SUMMARY_BTN_CLASS}, .${AUTO_TRANSLATE_BTN_CLASS}, .mc-outgoing-toolbar`,
+        ) ||
+        node.querySelector?.(
+          `.${BUTTON_CLASS}, .${SUMMARY_BTN_CLASS}, .${AUTO_TRANSLATE_BTN_CLASS}, .mc-outgoing-toolbar`,
+        )
       ) {
         continue;
       }
@@ -413,8 +633,8 @@ function scheduleOutgoingRescan(reason: string): void {
   if (rescanTimer !== null) window.clearTimeout(rescanTimer);
   rescanTimer = window.setTimeout(() => {
     rescanTimer = null;
-    if (tryInjectComposerToolbar()) {
-      log(`composer toolbar injected (${reason})`);
+    if (ensureComposerToolbar()) {
+      log(`composer toolbar ensured (${reason})`);
     }
   }, OUTGOING_RESCAN_DEBOUNCE_MS);
 }
@@ -432,18 +652,33 @@ function startOutgoingObserver(): void {
   outgoingObserver.observe(document.body, { childList: true, subtree: true });
 }
 
+const TOOLBAR_KEEPALIVE_MS = 2000;
+
 export function initOutgoing(): void {
   void ensureSession();
-  tryInjectComposerToolbar();
+  ensureComposerToolbar();
   startOutgoingObserver();
+
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== "local" || !changes[AUTO_TRANSLATE_STORAGE_KEY]) return;
+    const enabled = changes[AUTO_TRANSLATE_STORAGE_KEY].newValue !== false;
+    document
+      .querySelectorAll<HTMLButtonElement>(`.${AUTO_TRANSLATE_BTN_CLASS}`)
+      .forEach((btn) => applyAutoTranslateButtonState(btn, enabled));
+  });
+
+  window.setInterval(() => {
+    ensureComposerToolbar();
+  }, TOOLBAR_KEEPALIVE_MS);
+
   for (const delay of POST_NAVIGATION_DELAYS_MS) {
-    window.setTimeout(() => tryInjectComposerToolbar(), delay);
+    window.setTimeout(() => ensureComposerToolbar(), delay);
   }
 }
 
 export function rescanOutgoingComposer(): void {
-  tryInjectComposerToolbar();
+  ensureComposerToolbar();
   for (const delay of POST_NAVIGATION_DELAYS_MS) {
-    window.setTimeout(() => tryInjectComposerToolbar(), delay);
+    window.setTimeout(() => ensureComposerToolbar(), delay);
   }
 }

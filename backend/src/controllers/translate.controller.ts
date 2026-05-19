@@ -17,7 +17,9 @@ import {
   runGeminiOutgoingDryRun,
   runGeminiOutgoingTranslate,
 } from "../services/geminiOutgoingTranslate.service";
+import { summarizeConversation } from "../services/geminiConversationSummary.service";
 import { detectSubscriberNameGender } from "../services/geminiNameGender.service";
+import { organizationDisplayName } from "./organization.helpers";
 import { resolveLanguagePairFromProfile } from "../services/translateLanguagePair";
 import { resolveTranslateOrganizationContext } from "./translateOrganizationContext";
 
@@ -60,6 +62,50 @@ export async function translateBatch(
       res.status(503).json({
         error:
           err instanceof Error ? err.message : "Name gender detection failed",
+      });
+    }
+    return;
+  }
+
+  if (body?.conversationSummary === true) {
+    const transcript = String(body.conversationTranscript ?? "").trim();
+    if (!transcript) {
+      res.status(400).json({ error: "conversationTranscript is required." });
+      return;
+    }
+
+    try {
+      const ctx = await resolveTranslateOrganizationContext(req, res);
+      if (!ctx) return;
+
+      const { user, org } = ctx;
+      const { source: customerLang, target: agentLang } =
+        resolveLanguagePairFromProfile({
+          userLanguage: user.language || "en",
+          orgLanguage: org.language,
+          outgoing: false,
+        });
+
+      console.log(
+        `[translate] conversation-summary | user=${String(user._id)} org=${String(org._id)} | chars=${transcript.length}`,
+      );
+
+      const summary = await summarizeConversation({
+        transcript,
+        organizationName: organizationDisplayName(org),
+        organizationContext: org.translationContext ?? "",
+        organizationTerms: Array.isArray(org.terms) ? org.terms : [],
+        organizationLanguageCode: org.language,
+        agentLanguageCode: agentLang,
+        customerLanguageCode: customerLang,
+      });
+
+      res.status(200).json({ translations: [], conversationSummary: summary });
+    } catch (err) {
+      console.error("[translate] conversation-summary failed:", err);
+      res.status(503).json({
+        error:
+          err instanceof Error ? err.message : "Conversation summary failed",
       });
     }
     return;

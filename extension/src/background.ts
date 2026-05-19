@@ -48,12 +48,18 @@ interface BgDetectNameGenderMessage {
   subscriberName: string;
 }
 
+interface BgConversationSummaryMessage {
+  type: "conversationSummary";
+  conversationTranscript: string;
+}
+
 type BgMessage =
   | BgTranslateMessage
   | BgLoginMessage
   | BgGetSessionMessage
   | BgLogoutMessage
-  | BgDetectNameGenderMessage;
+  | BgDetectNameGenderMessage
+  | BgConversationSummaryMessage;
 
 interface ExternalSetAuthMessage {
   type: "SET_AUTH";
@@ -339,6 +345,90 @@ async function handleDetectNameGender(
   }
 }
 
+const SUMMARY_REQUEST_TIMEOUT_MS = 90000;
+
+async function handleConversationSummary(
+  conversationTranscript: string,
+): Promise<
+  | { ok: true; conversationSummary: string }
+  | { ok: false; error: string }
+> {
+  let headers: HeadersInit;
+  try {
+    headers = await authHeaders();
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "Not signed in",
+    };
+  }
+
+  const session = await getSession(false);
+  if (!session.organization) {
+    console.warn(
+      "[ManychatTranslator:bg] conversation-summary blocked — no organization",
+    );
+    return { ok: false, error: NO_ORG_ERROR };
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(
+    () => controller.abort(),
+    SUMMARY_REQUEST_TIMEOUT_MS,
+  );
+
+  try {
+    const res = await fetch(TRANSLATE_URL, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        conversationSummary: true,
+        conversationTranscript,
+        texts: [],
+      }),
+      signal: controller.signal,
+    });
+
+    const data = (await res.json()) as {
+      conversationSummary?: string;
+      error?: string;
+      message?: string;
+    };
+
+    if (res.status === 401) {
+      await clearAuth();
+      return { ok: false, error: "Session expired. Sign in again." };
+    }
+    if (res.status === 403) {
+      return {
+        ok: false,
+        error: data.error ?? data.message ?? NO_ORG_ERROR,
+      };
+    }
+    if (!res.ok) {
+      return {
+        ok: false,
+        error: data.error ?? data.message ?? `Backend HTTP ${res.status}`,
+      };
+    }
+
+    const conversationSummary = data.conversationSummary?.trim();
+    if (!conversationSummary) {
+      return { ok: false, error: "Invalid conversation summary response" };
+    }
+
+    console.log("[ManychatTranslator:bg] conversation-summary ok");
+    return { ok: true, conversationSummary };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 chrome.runtime.onMessage.addListener((message: BgMessage, _sender, sendResponse) => {
   if (message?.type === "login") {
     void handleLogin(message.username, message.password).then(sendResponse);
@@ -360,6 +450,12 @@ chrome.runtime.onMessage.addListener((message: BgMessage, _sender, sendResponse)
   }
   if (message?.type === "detectNameGender" && message.subscriberName) {
     void handleDetectNameGender(message.subscriberName).then(sendResponse);
+    return true;
+  }
+  if (message?.type === "conversationSummary" && message.conversationTranscript) {
+    void handleConversationSummary(message.conversationTranscript).then(
+      sendResponse,
+    );
     return true;
   }
   sendResponse({ ok: false, error: "Invalid message" });

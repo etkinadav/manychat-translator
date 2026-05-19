@@ -21,9 +21,14 @@
  */
 
 import {
+  AUTO_TRANSLATE_STORAGE_KEY,
+  readAutoTranslateEnabled,
+} from "./auto-translate";
+import {
   readCustomerGender,
   type CustomerGender,
 } from "./customer-gender";
+import { removeConversationSummary } from "./chat-transcript";
 import { initOutgoing, rescanOutgoingComposer } from "./outgoing";
 import { initSubscriberGender, rescanSubscriberGender } from "./subscriber-gender";
 import { fetchSession } from "./session-client";
@@ -73,8 +78,6 @@ const POST_NAVIGATION_RESCAN_DELAYS_MS = [200, 600, 1500];
 // State
 // ---------------------------------------------------------------------------
 
-const processedTextNodes = new WeakSet<Element>();
-
 interface PendingItem {
   text: string;
   placeholder: HTMLElement;
@@ -86,6 +89,8 @@ let flushTimer: number | null = null;
 let lastUrl = location.href;
 /** False when signed out or user has no connected organization. */
 let translationAllowed = false;
+/** False when user turned off automatic incoming translation (persisted). */
+let autoTranslateEnabled = true;
 
 async function refreshTranslationAllowed(): Promise<boolean> {
   try {
@@ -155,11 +160,32 @@ function cleanupSkippedBlock(block: Element): void {
  *
  * Returns true if a NEW placeholder was queued, false otherwise.
  */
+function canAutoTranslateIncoming(): boolean {
+  return translationAllowed && autoTranslateEnabled;
+}
+
 function queueForTranslation(textEl: HTMLElement): boolean {
-  if (!translationAllowed) return false;
-  if (processedTextNodes.has(textEl)) return false;
+  if (!canAutoTranslateIncoming()) return false;
+
+  const existingPlaceholder = textEl.nextElementSibling;
+  if (
+    existingPlaceholder instanceof HTMLElement &&
+    existingPlaceholder.classList.contains(TRANSLATION_CLASS) &&
+    existingPlaceholder.getAttribute(STATUS_ATTR) === "done"
+  ) {
+    return false;
+  }
+
   if (textEl.hasAttribute(PROCESSED_ATTR)) {
-    processedTextNodes.add(textEl);
+    if (
+      existingPlaceholder instanceof HTMLElement &&
+      existingPlaceholder.classList.contains(TRANSLATION_CLASS)
+    ) {
+      const status = existingPlaceholder.getAttribute(STATUS_ATTR);
+      if (status === "queued" || status === "loading") {
+        return false;
+      }
+    }
     return false;
   }
 
@@ -196,7 +222,6 @@ function queueForTranslation(textEl: HTMLElement): boolean {
   placeholder.appendChild(spinner);
 
   textEl.setAttribute(PROCESSED_ATTR, "true");
-  processedTextNodes.add(textEl);
   placeholder.setAttribute(SOURCE_TEXT_ATTR, originalText);
 
   pendingQueue.push({ text: originalText, placeholder });
@@ -209,8 +234,30 @@ function setStatus(placeholder: HTMLElement, status: TranslationStatus): void {
   placeholder.setAttribute(STATUS_ATTR, status);
 }
 
+function cancelPendingAutoTranslations(): void {
+  if (flushTimer !== null) {
+    window.clearTimeout(flushTimer);
+    flushTimer = null;
+  }
+
+  const batch = pendingQueue.splice(0, pendingQueue.length);
+  for (const item of batch) {
+    const textEl = item.placeholder.previousElementSibling;
+    if (textEl instanceof HTMLElement) {
+      textEl.removeAttribute(PROCESSED_ATTR);
+    }
+    if (item.placeholder.getAttribute(STATUS_ATTR) !== "done") {
+      item.placeholder.remove();
+    }
+  }
+
+  if (batch.length > 0) {
+    log(`auto-translate off — cancelled ${batch.length} pending message(s)`);
+  }
+}
+
 function scanAndQueue(root: ParentNode = document): number {
-  if (!translationAllowed) return 0;
+  if (!canAutoTranslateIncoming()) return 0;
   const blocks = root.querySelectorAll(MESSAGE_BLOCK_SELECTOR);
   if (blocks.length === 0) return 0;
 
@@ -286,6 +333,11 @@ function scheduleFlush(): void {
 
 async function flushQueue(): Promise<void> {
   if (pendingQueue.length === 0) return;
+
+  if (!canAutoTranslateIncoming()) {
+    cancelPendingAutoTranslations();
+    return;
+  }
 
   if (!translationAllowed) {
     await refreshTranslationAllowed();
@@ -504,7 +556,11 @@ function isRelevantMutation(mutation: MutationRecord): boolean {
   const target = mutation.target as Element | null;
   if (target?.classList?.contains(TRANSLATION_CLASS)) return false;
   if (target?.closest?.(`.${TRANSLATION_CLASS}`)) return false;
-  if (target?.closest?.(`.${GEMINI_BTN_CLASS}, .${GEMINI_RESULT_CLASS}`)) {
+  if (
+    target?.closest?.(
+      `.${GEMINI_BTN_CLASS}, .${GEMINI_RESULT_CLASS}, .mc-conversation-summary`,
+    )
+  ) {
     return false;
   }
 
@@ -552,6 +608,7 @@ function handleUrlChange(newUrl: string): void {
       log("translation disabled — no organization connected");
     }
   });
+  removeConversationSummary();
   rescanOutgoingComposer();
   rescanSubscriberGender();
   for (const delay of POST_NAVIGATION_RESCAN_DELAYS_MS) {
@@ -592,11 +649,25 @@ function patchHistory(): void {
 // Boot
 // ---------------------------------------------------------------------------
 
+function applyAutoTranslateEnabled(enabled: boolean): void {
+  autoTranslateEnabled = enabled;
+  if (enabled) {
+    log("automatic incoming translation enabled");
+    scanAndQueue();
+    return;
+  }
+  log("automatic incoming translation disabled");
+  cancelPendingAutoTranslations();
+}
+
 async function boot(): Promise<void> {
   log("extension loaded on", location.href);
   await refreshTranslationAllowed();
+  autoTranslateEnabled = await readAutoTranslateEnabled();
   if (!translationAllowed) {
     log("incoming translation disabled — connect to an organization in Configuration");
+  } else if (!autoTranslateEnabled) {
+    log("automatic incoming translation is off (toolbar toggle)");
   }
   scanAndQueue();
   startObserver();
@@ -606,6 +677,10 @@ async function boot(): Promise<void> {
 
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== "local") return;
+    if (changes[AUTO_TRANSLATE_STORAGE_KEY]) {
+      const enabled = changes[AUTO_TRANSLATE_STORAGE_KEY].newValue !== false;
+      applyAutoTranslateEnabled(enabled);
+    }
     if (changes["mct-session"] || changes["mct-auth"]) {
       void refreshTranslationAllowed().then((allowed) => {
         log(
@@ -613,7 +688,7 @@ async function boot(): Promise<void> {
             ? "translation enabled — organization connected"
             : "translation disabled — no organization or signed out",
         );
-        if (allowed) scanAndQueue();
+        if (allowed && autoTranslateEnabled) scanAndQueue();
         rescanSubscriberGender();
       });
     }
