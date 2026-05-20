@@ -7,7 +7,6 @@ export interface ConversationSummaryInput {
   organizationName: string;
   organizationContext: string;
   organizationTerms: unknown;
-  organizationLanguageCode: string;
   agentLanguageCode: string;
   customerLanguageCode: string;
 }
@@ -17,13 +16,12 @@ export function buildConversationSummaryPrompt(
 ): string {
   const orgName = input.organizationName.trim() || "the company";
   const orgContext = input.organizationContext.trim();
-  const orgLang = input.organizationLanguageCode.trim() || "he";
-  const orgLabel = languageLabel(orgLang);
+  const agentLang = input.agentLanguageCode.trim() || "en";
+  const agentLabel = languageLabel(agentLang);
+  const customerLabel = languageLabel(input.customerLanguageCode);
   const termsLine = formatOrganizationTermsForPrompt(
     input.organizationTerms ?? [],
   );
-  const agentLabel = languageLabel(input.agentLanguageCode);
-  const customerLabel = languageLabel(input.customerLanguageCode);
 
   const contextLines: string[] = [];
   if (orgContext) contextLines.push(`Company context: ${orgContext}`);
@@ -31,64 +29,33 @@ export function buildConversationSummaryPrompt(
   const contextBlock =
     contextLines.length > 0 ? `\n${contextLines.join("\n")}\n` : "\n";
 
-  return `You are helping a customer support team at ${orgName}. Below is a chronological chat transcript (customer messages in ${customerLabel}, agent-side text in ${agentLabel}).${contextBlock}
+  return `You are helping a customer support agent at ${orgName}. Below is a chronological chat transcript (customer messages in ${customerLabel}, agent-side text in ${agentLabel}).${contextBlock}
 Transcript (oldest to newest):
 ${input.transcript.trim()}
 
-Write a concise summary for the support agent.
+Write a concise conversation summary for the agent.
 
-=== REQUIRED OUTPUT FORMAT ===
-SUMMARY:
-<Exactly 3 sentences in ${orgLabel} (${orgLang}) only: (1) what the customer wanted, (2) what solution or outcome was reached, (3) current status or next step if any.>
+=== OUTPUT ===
+Write exactly 3 short sentences in ${agentLabel} (${agentLang}) only:
+1. What the customer wanted or asked about.
+2. What solution or outcome was reached (if any).
+3. Current status or next step (if any).
 
-AGENT INVOLVED:
-<yes or no — was a human support agent actively involved in this conversation?>
-
-PHONE CONTACT:
-<yes or no — does the transcript indicate the agent contacted the customer by phone?>
-
-=== OUTPUT RULES ===
-- The SUMMARY section must be written entirely in ${orgLabel} (${orgLang}).
-- Use the exact English labels SUMMARY:, AGENT INVOLVED:, PHONE CONTACT: as shown (do not translate these labels).
-- Under AGENT INVOLVED and PHONE CONTACT write only "yes" or "no" (lowercase English).
-- Do not add other sections, markdown, or extra text.`;
+=== RULES ===
+- Output only the 3 sentences — no headings, labels, bullet points, or extra text.
+- Write entirely in ${agentLabel} (${agentLang}) so the agent can read it in their language.
+- Do not include yes/no fields or metadata about agent involvement or phone contact.`;
 }
 
-function extractSection(raw: string, label: string): string {
-  const pattern = new RegExp(
-    `${label}\\s*:\\s*([\\s\\S]*?)(?=\\n[A-Z][A-Z ]+:|$)`,
-    "i",
-  );
-  const match = raw.match(pattern);
-  return match?.[1]?.trim() ?? "";
-}
-
-function parseYesNo(value: string): "yes" | "no" | null {
-  const v = value.trim().toLowerCase().replace(/[.!]/g, "");
-  if (v === "yes" || v === "no") return v;
-  if (/\byes\b/.test(v) && !/\bno\b/.test(v)) return "yes";
-  if (/\bno\b/.test(v) && !/\byes\b/.test(v)) return "no";
-  return null;
-}
-
-/** Normalize Gemini output to a fixed layout with English yes/no lines at the end. */
+/** Strip optional SUMMARY: label and trailing metadata if the model adds it anyway. */
 export function formatConversationSummaryResponse(raw: string): string {
-  const summaryBody = extractSection(raw, "SUMMARY");
-  const agentRaw = extractSection(raw, "AGENT INVOLVED");
-  const phoneRaw = extractSection(raw, "PHONE CONTACT");
-
-  const agentInvolved = parseYesNo(agentRaw) ?? "no";
-  const phoneContact = parseYesNo(phoneRaw) ?? "no";
-
-  const summaryText =
-    summaryBody ||
-    raw
-      .replace(/AGENT INVOLVED:[\s\S]*/i, "")
-      .replace(/PHONE CONTACT:[\s\S]*/i, "")
-      .replace(/^SUMMARY:\s*/i, "")
-      .trim();
-
-  return `${summaryText}\n\nAGENT INVOLVED: ${agentInvolved}\nPHONE CONTACT: ${phoneContact}`;
+  let text = raw.trim();
+  text = text.replace(/^SUMMARY:\s*/i, "").trim();
+  text = text
+    .replace(/\n\s*AGENT INVOLVED:[\s\S]*/i, "")
+    .replace(/\n\s*PHONE CONTACT:[\s\S]*/i, "")
+    .trim();
+  return text;
 }
 
 export async function summarizeConversation(

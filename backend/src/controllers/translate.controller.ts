@@ -95,7 +95,6 @@ export async function translateBatch(
         organizationName: organizationDisplayName(org),
         organizationContext: org.translationContext ?? "",
         organizationTerms: Array.isArray(org.terms) ? org.terms : [],
-        organizationLanguageCode: org.language,
         agentLanguageCode: agentLang,
         customerLanguageCode: customerLang,
       });
