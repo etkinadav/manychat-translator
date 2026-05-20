@@ -239,6 +239,13 @@
   box-sizing: border-box;
 }
 
+/* 24h expired window — inline with Manychat template toolbar */
+[class*="_toolbarContainer_"] .mc-outgoing-toolbar {
+  margin-top: 0;
+  margin-inline-end: 8px;
+  flex-shrink: 0;
+}
+
 .mc-gender-selector {
   display: inline-flex;
   align-items: center;

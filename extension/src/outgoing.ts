@@ -28,6 +28,10 @@ const warn = (...args: unknown[]) => console.warn(LOG_PREFIX, ...args);
 const TEXTAREA_SELECTOR =
   'textarea[name="whatsappMessageInput"][data-mc-editor="true"]';
 const TOOLBAR_ATTR = "data-mc-outgoing-toolbar";
+const TOOLBAR_MODE_ATTR = "data-mc-toolbar-mode";
+const TOOLBAR_MODE_COMPOSER = "composer";
+const TOOLBAR_MODE_READONLY = "readonly";
+const EXPIRED_WINDOW_SELECTOR = '[class*="_toolbarContainer_"]';
 const BUTTON_ATTR = "data-mc-translate-outgoing";
 const GENDER_ATTR = "data-mc-customer-gender";
 const BUTTON_CLASS = "mc-translate-to-hebrew-btn";
@@ -35,6 +39,8 @@ const SUMMARY_BTN_CLASS = "mc-conversation-summary-btn";
 const SUMMARY_BTN_ATTR = "data-mc-summary-toolbar-btn";
 const AUTO_TRANSLATE_BTN_CLASS = "mc-auto-translate-toggle";
 const AUTO_TRANSLATE_BTN_ATTR = "data-mc-auto-translate-toggle";
+const GENDER_SELECTOR_CLASS = "mc-gender-selector";
+const GENDER_ATTACHED_ATTR = "data-mc-gender-attached";
 
 const LABEL_LOADING = "Translating...";
 const LABEL_SUMMARY_LOADING = "Summarizing...";
@@ -93,14 +99,92 @@ function findToolbarForTextarea(textarea: HTMLTextAreaElement): HTMLElement | nu
   return null;
 }
 
-function removeOrphanedToolbars(activeTextarea: HTMLTextAreaElement): void {
+function isExpiredConversationText(text: string): boolean {
+  return (
+    /24\s*hours?/i.test(text) ||
+    /24\s*שעות/.test(text) ||
+    /message templates/i.test(text) ||
+    /תבניות/.test(text)
+  );
+}
+
+/** Manychat composer area when the 24h WhatsApp window has expired. */
+function findExpiredConversationAnchor(): HTMLElement | null {
+  for (const container of document.querySelectorAll<HTMLElement>(
+    EXPIRED_WINDOW_SELECTOR,
+  )) {
+    const wrapper = container.closest('[class*="_wrapper_"]');
+    if (!wrapper) continue;
+    if (isExpiredConversationText(wrapper.textContent ?? "")) {
+      return container;
+    }
+  }
+  return null;
+}
+
+function removeOrphanedToolbars(
+  activeTextarea: HTMLTextAreaElement | null,
+  expiredAnchor: HTMLElement | null,
+): void {
   for (const toolbar of document.querySelectorAll<HTMLElement>(
     `[${TOOLBAR_ATTR}="true"]`,
   )) {
-    if (toolbar.previousElementSibling !== activeTextarea) {
+    const mode = toolbar.getAttribute(TOOLBAR_MODE_ATTR);
+
+    if (expiredAnchor) {
+      if (
+        mode !== TOOLBAR_MODE_READONLY ||
+        !expiredAnchor.contains(toolbar)
+      ) {
+        toolbar.remove();
+      }
+      continue;
+    }
+
+    if (mode === TOOLBAR_MODE_READONLY) {
+      toolbar.remove();
+      continue;
+    }
+
+    if (!activeTextarea || toolbar.previousElementSibling !== activeTextarea) {
       toolbar.remove();
     }
   }
+}
+
+function dedupeToolbarGenderSelectors(toolbar: HTMLElement): void {
+  const selectors = toolbar.querySelectorAll(`.${GENDER_SELECTOR_CLASS}`);
+  for (let i = 1; i < selectors.length; i++) {
+    selectors[i]?.remove();
+  }
+}
+
+function attachGenderToToolbar(toolbar: HTMLElement): void {
+  dedupeToolbarGenderSelectors(toolbar);
+  if (toolbar.querySelector(`.${GENDER_SELECTOR_CLASS}`)) {
+    toolbar.setAttribute(GENDER_ATTACHED_ATTR, "true");
+    return;
+  }
+  if (toolbar.getAttribute(GENDER_ATTACHED_ATTR) === "true") return;
+
+  const genderEl = createCustomerGenderSelector("male");
+  toolbar.prepend(genderEl);
+  toolbar.setAttribute(GENDER_ATTACHED_ATTR, "true");
+
+  void readCustomerGender().then((gender) => {
+    const input = toolbar.querySelector<HTMLInputElement>(
+      `input[name="${GENDER_ATTR}"][value="${gender}"]`,
+    );
+    if (input) input.checked = true;
+  });
+
+  void ensureSession().then((session) => {
+    if (!session?.organization) {
+      genderEl.querySelectorAll("input").forEach((input) => {
+        input.disabled = true;
+      });
+    }
+  });
 }
 
 function syncToolbarSession(toolbar: HTMLElement): void {
@@ -120,16 +204,26 @@ function syncToolbarSession(toolbar: HTMLElement): void {
       translateBtn.disabled = !hasOrg;
     }
     if (summaryBtn) summaryBtn.disabled = !hasOrg;
-    if (autoBtn) autoBtn.disabled = !hasOrg;
-    syncAutoTranslateToggle(toolbar);
+    if (autoBtn) {
+      autoBtn.disabled = false;
+      syncAutoTranslateToggle(toolbar);
+    }
   });
 }
 
-function ensureToolbarButtons(toolbar: HTMLElement): void {
+function ensureToolbarButtons(
+  toolbar: HTMLElement,
+  includeTranslate: boolean,
+): void {
+  if (!includeTranslate) {
+    toolbar.querySelector(`.${BUTTON_CLASS}`)?.remove();
+  }
+
   if (!toolbar.querySelector(`.${AUTO_TRANSLATE_BTN_CLASS}`)) {
     toolbar.prepend(createAutoTranslateToggle());
   }
-  if (!toolbar.querySelector(`.${BUTTON_CLASS}`)) {
+
+  if (includeTranslate && !toolbar.querySelector(`.${BUTTON_CLASS}`)) {
     const btn = createTranslateButton();
     btn.addEventListener("click", () => {
       void onTranslateClick(btn);
@@ -138,9 +232,13 @@ function ensureToolbarButtons(toolbar: HTMLElement): void {
     if (autoBtn) autoBtn.insertAdjacentElement("afterend", btn);
     else toolbar.append(btn);
   }
+
   if (!toolbar.querySelector(`.${SUMMARY_BTN_CLASS}`)) {
     toolbar.append(createSummaryButton());
   }
+
+  attachGenderToToolbar(toolbar);
+  dedupeToolbarGenderSelectors(toolbar);
 }
 
 interface ConversationSummaryReply {
@@ -260,7 +358,7 @@ async function onConversationSummaryClick(btn: HTMLButtonElement): Promise<void>
   try {
     const summary = await postConversationSummary(transcript);
     showConversationSummary(summary);
-    ensureComposerToolbar();
+    ensureOutgoingToolbars();
     btn.classList.remove("loading");
     btn.classList.add("success");
     btn.textContent = "Summary ✓";
@@ -304,7 +402,7 @@ function createCustomerGenderSelector(
   initial: CustomerGender,
 ): HTMLDivElement {
   const wrap = document.createElement("div");
-  wrap.className = "mc-gender-selector";
+  wrap.className = GENDER_SELECTOR_CLASS;
   wrap.title = "Customer gender (for translation tone)";
 
   const makeOption = (value: CustomerGender, label: string): HTMLLabelElement => {
@@ -326,36 +424,40 @@ function createCustomerGenderSelector(
   return wrap;
 }
 
-function createOutgoingToolbar(): HTMLDivElement {
+function createOutgoingToolbar(includeTranslate: boolean): HTMLDivElement {
   const toolbar = document.createElement("div");
   toolbar.className = "mc-outgoing-toolbar";
   toolbar.setAttribute(TOOLBAR_ATTR, "true");
-
-  const btn = createTranslateButton();
-  btn.addEventListener("click", () => {
-    void onTranslateClick(btn);
-  });
+  toolbar.setAttribute(
+    TOOLBAR_MODE_ATTR,
+    includeTranslate ? TOOLBAR_MODE_COMPOSER : TOOLBAR_MODE_READONLY,
+  );
 
   const summaryBtn = createSummaryButton();
   const autoBtn = createAutoTranslateToggle();
+  const children: HTMLElement[] = [autoBtn];
+
+  if (includeTranslate) {
+    const btn = createTranslateButton();
+    btn.addEventListener("click", () => {
+      void onTranslateClick(btn);
+    });
+    children.push(btn);
+  }
+
+  children.push(summaryBtn);
+  toolbar.append(...children);
 
   void ensureSession().then((session) => {
     const hasOrg = Boolean(session?.organization);
-    btn.disabled = !hasOrg;
     summaryBtn.disabled = !hasOrg;
-    autoBtn.disabled = !hasOrg;
-    void readCustomerGender().then((gender) => {
-      const genderEl = createCustomerGenderSelector(gender);
-      if (!hasOrg) {
-        genderEl.querySelectorAll("input").forEach((input) => {
-          input.disabled = true;
-        });
-      }
-      toolbar.prepend(genderEl);
-    });
+    autoBtn.disabled = false;
+    const translateBtn = toolbar.querySelector<HTMLButtonElement>(
+      `.${BUTTON_CLASS}`,
+    );
+    if (translateBtn) translateBtn.disabled = !hasOrg;
   });
 
-  toolbar.append(autoBtn, btn, summaryBtn);
   return toolbar;
 }
 
@@ -581,23 +683,63 @@ async function onTranslateClick(btn: HTMLButtonElement): Promise<void> {
   }
 }
 
-function ensureComposerToolbar(): boolean {
-  const textarea = findComposerTextarea();
-  if (!textarea) return false;
-
-  removeOrphanedToolbars(textarea);
-
+function ensureComposerToolbar(textarea: HTMLTextAreaElement): boolean {
   const existing = findToolbarForTextarea(textarea);
   if (existing) {
-    ensureToolbarButtons(existing);
+    existing.setAttribute(TOOLBAR_MODE_ATTR, TOOLBAR_MODE_COMPOSER);
+    ensureToolbarButtons(existing, true);
     syncToolbarSession(existing);
     return true;
   }
 
-  const toolbar = createOutgoingToolbar();
+  const toolbar = createOutgoingToolbar(true);
   textarea.insertAdjacentElement("afterend", toolbar);
+  ensureToolbarButtons(toolbar, true);
   syncToolbarSession(toolbar);
   return true;
+}
+
+function ensureExpiredConversationToolbar(anchor: HTMLElement): boolean {
+  let toolbar = anchor.querySelector<HTMLElement>(
+    `[${TOOLBAR_ATTR}="true"][${TOOLBAR_MODE_ATTR}="${TOOLBAR_MODE_READONLY}"]`,
+  );
+
+  if (toolbar) {
+    ensureToolbarButtons(toolbar, false);
+    syncToolbarSession(toolbar);
+    return true;
+  }
+
+  toolbar = createOutgoingToolbar(false);
+  anchor.prepend(toolbar);
+  ensureToolbarButtons(toolbar, false);
+  syncToolbarSession(toolbar);
+  return true;
+}
+
+function ensureOutgoingToolbars(): boolean {
+  const textarea = findComposerTextarea();
+  const expiredAnchor = findExpiredConversationAnchor();
+  removeOrphanedToolbars(textarea, expiredAnchor);
+
+  let ensured = false;
+  if (expiredAnchor) {
+    ensured = ensureExpiredConversationToolbar(expiredAnchor) || ensured;
+  } else if (textarea) {
+    ensured = ensureComposerToolbar(textarea) || ensured;
+  }
+
+  document
+    .querySelectorAll<HTMLElement>(`[${TOOLBAR_ATTR}="true"]`)
+    .forEach(dedupeToolbarGenderSelectors);
+
+  document
+    .querySelectorAll<HTMLButtonElement>(`.${AUTO_TRANSLATE_BTN_CLASS}`)
+    .forEach((btn) => {
+      btn.disabled = false;
+    });
+
+  return ensured;
 }
 
 function isRelevantOutgoingMutation(mutation: MutationRecord): boolean {
@@ -633,8 +775,8 @@ function scheduleOutgoingRescan(reason: string): void {
   if (rescanTimer !== null) window.clearTimeout(rescanTimer);
   rescanTimer = window.setTimeout(() => {
     rescanTimer = null;
-    if (ensureComposerToolbar()) {
-      log(`composer toolbar ensured (${reason})`);
+    if (ensureOutgoingToolbars()) {
+      log(`outgoing toolbar ensured (${reason})`);
     }
   }, OUTGOING_RESCAN_DEBOUNCE_MS);
 }
@@ -656,7 +798,7 @@ const TOOLBAR_KEEPALIVE_MS = 2000;
 
 export function initOutgoing(): void {
   void ensureSession();
-  ensureComposerToolbar();
+  ensureOutgoingToolbars();
   startOutgoingObserver();
 
   chrome.storage.onChanged.addListener((changes, area) => {
@@ -668,17 +810,17 @@ export function initOutgoing(): void {
   });
 
   window.setInterval(() => {
-    ensureComposerToolbar();
+    ensureOutgoingToolbars();
   }, TOOLBAR_KEEPALIVE_MS);
 
   for (const delay of POST_NAVIGATION_DELAYS_MS) {
-    window.setTimeout(() => ensureComposerToolbar(), delay);
+    window.setTimeout(() => ensureOutgoingToolbars(), delay);
   }
 }
 
 export function rescanOutgoingComposer(): void {
-  ensureComposerToolbar();
+  ensureOutgoingToolbars();
   for (const delay of POST_NAVIGATION_DELAYS_MS) {
-    window.setTimeout(() => ensureComposerToolbar(), delay);
+    window.setTimeout(() => ensureOutgoingToolbars(), delay);
   }
 }
