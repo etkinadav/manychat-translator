@@ -26,4 +26,5 @@ export interface OrganizationDetails {
   language: string;
   translationContext: string;
   terms: OrganizationTermCategory[];
+  websiteIds: string[];
 }

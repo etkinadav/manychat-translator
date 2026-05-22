@@ -7,7 +7,9 @@ import type {
   OrganizationTermCategory,
   OrganizationTermInterpretation,
 } from "../../models/organization.model";
+import type { WebsiteListItem } from "../../models/website.model";
 import { OrganizationsService } from "../../services/organizations.service";
+import { WebsitesService } from "../../services/websites.service";
 
 @Component({
   selector: "app-organization-form",
@@ -31,6 +33,8 @@ export class OrganizationFormComponent implements OnInit {
   translationContext = "";
   password = "";
   terms: OrganizationTermCategory[] = [];
+  availableWebsites: WebsiteListItem[] = [];
+  selectedWebsiteIds: string[] = [];
 
   errorMessage = "";
   statusMessage = "";
@@ -39,6 +43,7 @@ export class OrganizationFormComponent implements OnInit {
     private route: ActivatedRoute,
     private router: Router,
     private organizationsService: OrganizationsService,
+    private websitesService: WebsitesService,
   ) {}
 
   ngOnInit(): void {
@@ -95,6 +100,20 @@ export class OrganizationFormComponent implements OnInit {
     return index;
   }
 
+  isWebsiteSelected(id: string): boolean {
+    return this.selectedWebsiteIds.includes(id);
+  }
+
+  toggleWebsite(id: string, checked: boolean): void {
+    if (checked) {
+      if (!this.selectedWebsiteIds.includes(id)) {
+        this.selectedWebsiteIds = [...this.selectedWebsiteIds, id];
+      }
+      return;
+    }
+    this.selectedWebsiteIds = this.selectedWebsiteIds.filter((w) => w !== id);
+  }
+
   onSubmit(): void {
     if (!this.name.trim()) {
       this.errorMessage = "Organization name is required.";
@@ -118,6 +137,7 @@ export class OrganizationFormComponent implements OnInit {
       language: this.language,
       translationContext: this.translationContext.trim(),
       terms: this.serializeTerms(),
+      websites: [...this.selectedWebsiteIds],
     };
 
     if (this.isEdit) {
@@ -172,29 +192,41 @@ export class OrganizationFormComponent implements OnInit {
   }
 
   private loadForm(): void {
-    if (!this.isEdit) {
-      this.name = "";
-      this.language = "en";
-      this.translationContext = "";
-      this.password = "";
-      this.terms = [];
-      this.isLoading = false;
-      return;
-    }
-
     this.isLoading = true;
-    this.organizationsService.get(this.editId).subscribe({
-      next: (data) => {
-        this.name = data.organization.name;
-        this.language = data.organization.language;
-        this.translationContext = data.organization.translationContext;
-        this.password = "";
-        this.terms = this.cloneTerms(data.organization.terms ?? []);
-        this.isLoading = false;
+    this.websitesService.list().subscribe({
+      next: ({ websites }) => {
+        this.availableWebsites = websites;
+        if (!this.isEdit) {
+          this.name = "";
+          this.language = "en";
+          this.translationContext = "";
+          this.password = "";
+          this.terms = [];
+          const manychat = websites.find((w) => w.slug === "manychat");
+          this.selectedWebsiteIds = manychat ? [manychat.id] : [];
+          this.isLoading = false;
+          return;
+        }
+
+        this.organizationsService.get(this.editId).subscribe({
+          next: (data) => {
+            this.name = data.organization.name;
+            this.language = data.organization.language;
+            this.translationContext = data.organization.translationContext;
+            this.password = "";
+            this.terms = this.cloneTerms(data.organization.terms ?? []);
+            this.selectedWebsiteIds = [...(data.organization.websiteIds ?? [])];
+            this.isLoading = false;
+          },
+          error: (err: HttpErrorResponse) => {
+            this.isLoading = false;
+            this.errorMessage = this.httpErrorMessage(err, "Failed to load form");
+          },
+        });
       },
       error: (err: HttpErrorResponse) => {
         this.isLoading = false;
-        this.errorMessage = this.httpErrorMessage(err, "Failed to load form");
+        this.errorMessage = this.httpErrorMessage(err, "Failed to load websites");
       },
     });
   }

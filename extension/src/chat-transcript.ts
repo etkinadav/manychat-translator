@@ -3,15 +3,11 @@
  */
 
 import { readAutoTranslateEnabled } from "./auto-translate";
+import { getDomProfile } from "./site-profile/context";
 
-const MESSAGE_BLOCK_SELECTOR = '[data-chat-message="block"]';
-const WRAPPER_SELECTOR = '[class*="_wrapper_"]';
-const SKIP_BLOCK_SELECTOR =
-  '[class*="_meta_"], [data-chat-message="meta"], [data-chat-message="system"], [class*="_system_"]';
-const TEXT_NODE_SELECTORS = [
-  '[data-chat-message="text"]',
-  '[class*="_text_"]',
-];
+function dom() {
+  return getDomProfile();
+}
 const TRANSLATION_CLASS = "mc-ai-translation";
 const STATUS_ATTR = "data-ai-translation-status";
 const GEMINI_RESULT_CLASS = "mc-ai-gemini-result";
@@ -26,7 +22,7 @@ function hasMeaningfulText(el: Element): boolean {
 }
 
 function findTextElementInBlock(block: Element): HTMLElement | null {
-  for (const selector of TEXT_NODE_SELECTORS) {
+  for (const selector of dom().incoming.textWithinBlock) {
     const candidate = block.querySelector<HTMLElement>(selector);
     if (candidate && hasMeaningfulText(candidate)) return candidate;
   }
@@ -34,25 +30,18 @@ function findTextElementInBlock(block: Element): HTMLElement | null {
 }
 
 function isSkippableMessageBlock(block: Element): boolean {
-  return block.matches(SKIP_BLOCK_SELECTOR);
+  return block.matches(dom().incoming.skipBlocks);
 }
 
 function detectSpeaker(block: Element): string {
   const blob = `${block.className} ${block.getAttribute("class") ?? ""} ${
     block.parentElement?.className ?? ""
   }`.toLowerCase();
-  if (
-    /outgoing|from-agent|agent-message|_out_|sent-by-user|message-out|_typeout|_botmessage/.test(
-      blob,
-    )
-  ) {
+  const { agentPatterns, customerPatterns } = dom().incoming.speaker;
+  if (agentPatterns.some((p) => blob.includes(p.toLowerCase()))) {
     return "Agent";
   }
-  if (
-    /incoming|from-subscriber|customer|subscriber|message-in|received|_typein/.test(
-      blob,
-    )
-  ) {
+  if (customerPatterns.some((p) => blob.includes(p.toLowerCase()))) {
     return "Customer";
   }
   return "Unknown";
@@ -78,7 +67,7 @@ function getTranslationText(placeholder: HTMLElement): string {
 
 function getLastChatMessageBlock(): HTMLElement | null {
   const blocks = Array.from(
-    document.querySelectorAll<HTMLElement>(MESSAGE_BLOCK_SELECTOR),
+    document.querySelectorAll<HTMLElement>(dom().incoming.messageBlock),
   ).filter((b) => !isSkippableMessageBlock(b));
   return blocks[blocks.length - 1] ?? null;
 }
@@ -101,7 +90,7 @@ function formatTranscriptEntry(
  */
 export async function collectConversationTranscript(): Promise<string | null> {
   const useTranslations = await readAutoTranslateEnabled();
-  const blocks = document.querySelectorAll(MESSAGE_BLOCK_SELECTOR);
+  const blocks = document.querySelectorAll(dom().incoming.messageBlock);
   const entries: string[] = [];
   let index = 0;
 
@@ -155,7 +144,7 @@ function stripMessageContent(wrapper: HTMLElement): void {
     )
     .forEach((el) => el.remove());
 
-  wrapper.querySelectorAll(MESSAGE_BLOCK_SELECTOR).forEach((block) => {
+  wrapper.querySelectorAll(dom().incoming.messageBlock).forEach((block) => {
     const textEl = findTextElementInBlock(block);
     if (textEl) {
       textEl.textContent = "";
@@ -195,9 +184,11 @@ function buildSummaryMessageWrapper(
   wrapper.setAttribute(SUMMARY_ATTR, "true");
   stripMessageContent(wrapper);
 
+  const summaryDom = dom().summary;
   const block =
-    wrapper.querySelector<HTMLElement>(MESSAGE_BLOCK_SELECTOR) ??
-    wrapper.querySelector<HTMLElement>('[class*="_block_"]');
+    wrapper.querySelector<HTMLElement>(
+      summaryDom?.messageBlock ?? dom().incoming.messageBlock,
+    ) ?? wrapper.querySelector<HTMLElement>('[class*="_block_"]');
 
   if (!block) {
     const fallback = document.createElement("div");
@@ -231,7 +222,9 @@ export function showConversationSummary(summaryText: string): void {
   const lastBlock = getLastChatMessageBlock();
   if (!lastBlock) return;
 
-  const templateWrapper = lastBlock.closest<HTMLElement>(WRAPPER_SELECTOR);
+  const templateWrapper = lastBlock.closest<HTMLElement>(
+    dom().summary?.messageWrapper ?? '[class*="_wrapper_"]',
+  );
   if (!templateWrapper?.parentElement) {
     showConversationSummaryFallback(summaryText);
     return;

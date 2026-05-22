@@ -30,8 +30,14 @@ import {
 } from "./customer-gender";
 import { removeConversationSummary } from "./chat-transcript";
 import { initOutgoing, rescanOutgoingComposer } from "./outgoing";
+import { bootstrapExtensionOnPage } from "./site-profile/bootstrap";
+import { getDomProfile, isFeatureEnabled } from "./site-profile/context";
 import { initSubscriberGender, rescanSubscriberGender } from "./subscriber-gender";
 import { fetchSession } from "./session-client";
+
+function dom() {
+  return getDomProfile();
+}
 
 const LOG_PREFIX = "[ManychatTranslator]";
 const log = (...args: unknown[]) => console.log(LOG_PREFIX, ...args);
@@ -40,21 +46,6 @@ const warn = (...args: unknown[]) => console.warn(LOG_PREFIX, ...args);
 // ---------------------------------------------------------------------------
 // Selectors / constants
 // ---------------------------------------------------------------------------
-
-const MESSAGE_BLOCK_SELECTOR = '[data-chat-message="block"]';
-
-/**
- * Blocks that are NOT user/agent chat messages — automation triggers, field
- * settings, system events, etc. Matched on stable patterns (not full hashes
- * like `_meta_10kfu_124`).
- */
-const SKIP_BLOCK_SELECTOR =
-  '[class*="_meta_"], [data-chat-message="meta"], [data-chat-message="system"], [class*="_system_"]';
-
-const TEXT_NODE_SELECTORS = [
-  '[data-chat-message="text"]',
-  '[class*="_text_"]',
-];
 
 const PROCESSED_ATTR = "data-ai-processed";
 const TRANSLATION_ATTR = "data-ai-translated";
@@ -107,7 +98,7 @@ async function refreshTranslationAllowed(): Promise<boolean> {
 // ---------------------------------------------------------------------------
 
 function findTextElementInBlock(block: Element): HTMLElement | null {
-  for (const selector of TEXT_NODE_SELECTORS) {
+  for (const selector of dom().incoming.textWithinBlock) {
     const candidate = block.querySelector<HTMLElement>(selector);
     if (candidate && hasMeaningfulText(candidate)) return candidate;
   }
@@ -139,7 +130,7 @@ function hasMeaningfulText(el: Element): boolean {
 
 /** Automation / system / meta rows — not real chat bubbles. */
 function isSkippableMessageBlock(block: Element): boolean {
-  return block.matches(SKIP_BLOCK_SELECTOR);
+  return block.matches(dom().incoming.skipBlocks);
 }
 
 /** Remove wrongly injected duplicates from a skipped block (e.g. before fix). */
@@ -161,7 +152,11 @@ function cleanupSkippedBlock(block: Element): void {
  * Returns true if a NEW placeholder was queued, false otherwise.
  */
 function canAutoTranslateIncoming(): boolean {
-  return translationAllowed && autoTranslateEnabled;
+  return (
+    translationAllowed &&
+    autoTranslateEnabled &&
+    isFeatureEnabled("incomingAutoTranslate")
+  );
 }
 
 function queueForTranslation(textEl: HTMLElement): boolean {
@@ -258,7 +253,7 @@ function cancelPendingAutoTranslations(): void {
 
 function scanAndQueue(root: ParentNode = document): number {
   if (!canAutoTranslateIncoming()) return 0;
-  const blocks = root.querySelectorAll(MESSAGE_BLOCK_SELECTOR);
+  const blocks = root.querySelectorAll(dom().incoming.messageBlock);
   if (blocks.length === 0) return 0;
 
   let queued = 0;
@@ -520,7 +515,11 @@ function applyTranslation(placeholder: HTMLElement, text: string): void {
   googleText.className = "mc-ai-google-text";
   googleText.textContent = text;
 
-  row.append(googleText, createGeminiButton(placeholder));
+  if (isFeatureEnabled("incomingGeminiButton")) {
+    row.append(googleText, createGeminiButton(placeholder));
+  } else {
+    row.append(googleText);
+  }
   placeholder.append(row);
 
   setStatus(placeholder, "done");
@@ -662,6 +661,11 @@ function applyAutoTranslateEnabled(enabled: boolean): void {
 
 async function boot(): Promise<void> {
   log("extension loaded on", location.href);
+  const siteActive = await bootstrapExtensionOnPage();
+  if (!siteActive) {
+    log("inactive on this URL (not in organization websites)");
+    return;
+  }
   await refreshTranslationAllowed();
   autoTranslateEnabled = await readAutoTranslateEnabled();
   if (!translationAllowed) {
@@ -672,8 +676,12 @@ async function boot(): Promise<void> {
   scanAndQueue();
   startObserver();
   patchHistory();
-  initOutgoing();
-  initSubscriberGender();
+  if (isFeatureEnabled("autoTranslateToggle") || isFeatureEnabled("outgoingTranslate") || isFeatureEnabled("conversationSummary")) {
+    initOutgoing();
+  }
+  if (isFeatureEnabled("subscriberGender")) {
+    initSubscriberGender();
+  }
 
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== "local") return;

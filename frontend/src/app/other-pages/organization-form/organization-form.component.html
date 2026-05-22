@@ -49,6 +49,26 @@
           ></textarea>
           <p class="field-hint">Instructions or tone used when translating messages.</p>
         </div>
+        <div class="field" *ngIf="availableWebsites.length > 0">
+          <span class="field-label">Connected websites</span>
+          <p class="field-hint">
+            The browser extension runs only on these sites for agents connected
+            to this organization.
+          </p>
+          <ul class="website-checklist">
+            <li *ngFor="let site of availableWebsites">
+              <label class="website-checklist__item">
+                <input
+                  type="checkbox"
+                  [checked]="isWebsiteSelected(site.id)"
+                  (change)="toggleWebsite(site.id, $any($event.target).checked)"
+                />
+                <span class="website-checklist__name">{{ site.name }}</span>
+                <span class="website-checklist__slug">{{ site.slug }}</span>
+              </label>
+            </li>
+          </ul>
+        </div>
         <div class="field">
           <label for="org-password">Organization password</label>
           <input

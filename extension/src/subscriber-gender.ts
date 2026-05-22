@@ -2,13 +2,19 @@
  * Subscriber name gender — button next to Manychat contact title.
  */
 
+import { getDomProfile } from "./site-profile/context";
 import { fetchSession } from "./session-client";
 
 const LOG_PREFIX = "[ManychatTranslator:subscriber-gender]";
 const log = (...args: unknown[]) => console.log(LOG_PREFIX, ...args);
 const warn = (...args: unknown[]) => console.warn(LOG_PREFIX, ...args);
 
-const SUBSCRIBER_TITLE_SELECTOR = 'span[class*="_subscriberTitle_"]';
+function subscriberTitleSelector(): string {
+  return (
+    getDomProfile().subscriber?.titleSelector ??
+    'span[class*="_subscriberTitle_"]'
+  );
+}
 const INJECTED_ATTR = "data-mc-subscriber-gender";
 const BTN_CLASS = "mc-subscriber-gender-btn";
 const VALID_RESULTS = new Set([
@@ -141,7 +147,7 @@ function injectGenderButton(titleEl: HTMLElement): boolean {
 function scanSubscriberTitles(root: ParentNode = document): number {
   let injected = 0;
   for (const el of Array.from(
-    root.querySelectorAll<HTMLElement>(SUBSCRIBER_TITLE_SELECTOR),
+    root.querySelectorAll<HTMLElement>(subscriberTitleSelector()),
   )) {
     if (injectGenderButton(el)) injected++;
   }
@@ -155,8 +161,8 @@ function isRelevantMutation(mutation: MutationRecord): boolean {
   if (mutation.type === "childList") {
     for (const node of Array.from(mutation.addedNodes)) {
       if (!(node instanceof Element)) continue;
-      if (node.matches?.(SUBSCRIBER_TITLE_SELECTOR)) return true;
-      if (node.querySelector?.(SUBSCRIBER_TITLE_SELECTOR)) return true;
+      if (node.matches?.(subscriberTitleSelector())) return true;
+      if (node.querySelector?.(subscriberTitleSelector())) return true;
     }
     return false;
   }

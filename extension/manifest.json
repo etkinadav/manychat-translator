@@ -3,7 +3,7 @@
   "name": "Manychat Translator",
   "version": "0.3.0",
   "description": "Translates Manychat messages using your account language and organization settings.",
-  "permissions": ["storage"],
+  "permissions": ["storage", "scripting"],
   "action": {
     "default_popup": "popup.html",
     "default_title": "Manychat Translator"

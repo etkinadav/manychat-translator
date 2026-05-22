@@ -6,6 +6,7 @@ import { errorHandler } from "./middleware/error-handler.middleware";
 import translateRoutes from "./routes/translate";
 import userRoutes from "./routes/user";
 import organizationsRoutes from "./routes/organizations";
+import websitesRoutes from "./routes/websites";
 
 const app = express();
 
@@ -23,6 +24,7 @@ app.get("/api/health", (_req, res) => {
 app.use("/api/translate", translateRoutes);
 app.use("/api/user", userRoutes);
 app.use("/api/organizations", organizationsRoutes);
+app.use("/api/websites", websitesRoutes);
 
 /** Built frontend (`frontend/dist`) — open http://localhost:3000/ for login UI */
 function resolveFrontendDist(): string | null {

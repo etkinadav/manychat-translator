@@ -18,20 +18,22 @@ import {
   removeConversationSummary,
   showConversationSummary,
 } from "./chat-transcript";
+import { getDomProfile, isFeatureEnabled } from "./site-profile/context";
 import { fetchSession } from "./session-client";
 import type { ExtensionSession } from "./types";
+
+function dom() {
+  return getDomProfile();
+}
 
 const LOG_PREFIX = "[ManychatTranslator:outgoing]";
 const log = (...args: unknown[]) => console.log(LOG_PREFIX, ...args);
 const warn = (...args: unknown[]) => console.warn(LOG_PREFIX, ...args);
 
-const TEXTAREA_SELECTOR =
-  'textarea[name="whatsappMessageInput"][data-mc-editor="true"]';
 const TOOLBAR_ATTR = "data-mc-outgoing-toolbar";
 const TOOLBAR_MODE_ATTR = "data-mc-toolbar-mode";
 const TOOLBAR_MODE_COMPOSER = "composer";
 const TOOLBAR_MODE_READONLY = "readonly";
-const EXPIRED_WINDOW_SELECTOR = '[class*="_toolbarContainer_"]';
 const BUTTON_ATTR = "data-mc-translate-outgoing";
 const GENDER_ATTR = "data-mc-customer-gender";
 const BUTTON_CLASS = "mc-translate-to-hebrew-btn";
@@ -88,7 +90,7 @@ async function ensureSession(): Promise<ExtensionSession | null> {
 }
 
 function findComposerTextarea(): HTMLTextAreaElement | null {
-  return document.querySelector<HTMLTextAreaElement>(TEXTAREA_SELECTOR);
+  return document.querySelector<HTMLTextAreaElement>(dom().composer.textarea);
 }
 
 function findToolbarForTextarea(textarea: HTMLTextAreaElement): HTMLElement | null {
@@ -100,20 +102,26 @@ function findToolbarForTextarea(textarea: HTMLTextAreaElement): HTMLElement | nu
 }
 
 function isExpiredConversationText(text: string): boolean {
-  return (
-    /24\s*hours?/i.test(text) ||
-    /24\s*שעות/.test(text) ||
-    /message templates/i.test(text) ||
-    /תבניות/.test(text)
-  );
+  const patterns = dom().composer.expiredWindow?.detectTextPatterns ?? [];
+  if (patterns.length === 0) return false;
+  return patterns.some((source) => {
+    try {
+      return new RegExp(source, "i").test(text);
+    } catch {
+      return false;
+    }
+  });
 }
 
 /** Manychat composer area when the 24h WhatsApp window has expired. */
 function findExpiredConversationAnchor(): HTMLElement | null {
+  const expired = dom().composer.expiredWindow;
+  if (!expired?.enabled) return null;
+
   for (const container of document.querySelectorAll<HTMLElement>(
-    EXPIRED_WINDOW_SELECTOR,
+    expired.containerSelector,
   )) {
-    const wrapper = container.closest('[class*="_wrapper_"]');
+    const wrapper = container.closest(expired.wrapperSelector);
     if (!wrapper) continue;
     if (isExpiredConversationText(wrapper.textContent ?? "")) {
       return container;
@@ -215,15 +223,24 @@ function ensureToolbarButtons(
   toolbar: HTMLElement,
   includeTranslate: boolean,
 ): void {
-  if (!includeTranslate) {
+  if (!includeTranslate || !isFeatureEnabled("outgoingTranslate")) {
     toolbar.querySelector(`.${BUTTON_CLASS}`)?.remove();
   }
 
-  if (!toolbar.querySelector(`.${AUTO_TRANSLATE_BTN_CLASS}`)) {
+  if (
+    isFeatureEnabled("autoTranslateToggle") &&
+    !toolbar.querySelector(`.${AUTO_TRANSLATE_BTN_CLASS}`)
+  ) {
     toolbar.prepend(createAutoTranslateToggle());
+  } else if (!isFeatureEnabled("autoTranslateToggle")) {
+    toolbar.querySelector(`.${AUTO_TRANSLATE_BTN_CLASS}`)?.remove();
   }
 
-  if (includeTranslate && !toolbar.querySelector(`.${BUTTON_CLASS}`)) {
+  if (
+    includeTranslate &&
+    isFeatureEnabled("outgoingTranslate") &&
+    !toolbar.querySelector(`.${BUTTON_CLASS}`)
+  ) {
     const btn = createTranslateButton();
     btn.addEventListener("click", () => {
       void onTranslateClick(btn);
@@ -233,11 +250,20 @@ function ensureToolbarButtons(
     else toolbar.append(btn);
   }
 
-  if (!toolbar.querySelector(`.${SUMMARY_BTN_CLASS}`)) {
+  if (
+    isFeatureEnabled("conversationSummary") &&
+    !toolbar.querySelector(`.${SUMMARY_BTN_CLASS}`)
+  ) {
     toolbar.append(createSummaryButton());
+  } else if (!isFeatureEnabled("conversationSummary")) {
+    toolbar.querySelector(`.${SUMMARY_BTN_CLASS}`)?.remove();
   }
 
-  attachGenderToToolbar(toolbar);
+  if (isFeatureEnabled("subscriberGender")) {
+    attachGenderToToolbar(toolbar);
+  } else {
+    toolbar.querySelector(`.${GENDER_SELECTOR_CLASS}`)?.remove();
+  }
   dedupeToolbarGenderSelectors(toolbar);
 }
 
@@ -433,11 +459,16 @@ function createOutgoingToolbar(includeTranslate: boolean): HTMLDivElement {
     includeTranslate ? TOOLBAR_MODE_COMPOSER : TOOLBAR_MODE_READONLY,
   );
 
-  const summaryBtn = createSummaryButton();
-  const autoBtn = createAutoTranslateToggle();
-  const children: HTMLElement[] = [autoBtn];
+  const children: HTMLElement[] = [];
+  let summaryBtn: HTMLButtonElement | null = null;
+  let autoBtn: HTMLButtonElement | null = null;
 
-  if (includeTranslate) {
+  if (isFeatureEnabled("autoTranslateToggle")) {
+    autoBtn = createAutoTranslateToggle();
+    children.push(autoBtn);
+  }
+
+  if (includeTranslate && isFeatureEnabled("outgoingTranslate")) {
     const btn = createTranslateButton();
     btn.addEventListener("click", () => {
       void onTranslateClick(btn);
@@ -445,13 +476,17 @@ function createOutgoingToolbar(includeTranslate: boolean): HTMLDivElement {
     children.push(btn);
   }
 
-  children.push(summaryBtn);
+  if (isFeatureEnabled("conversationSummary")) {
+    summaryBtn = createSummaryButton();
+    children.push(summaryBtn);
+  }
+
   toolbar.append(...children);
 
   void ensureSession().then((session) => {
     const hasOrg = Boolean(session?.organization);
-    summaryBtn.disabled = !hasOrg;
-    autoBtn.disabled = false;
+    if (summaryBtn) summaryBtn.disabled = !hasOrg;
+    if (autoBtn) autoBtn.disabled = false;
     const translateBtn = toolbar.querySelector<HTMLButtonElement>(
       `.${BUTTON_CLASS}`,
     );

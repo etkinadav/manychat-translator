@@ -9,6 +9,7 @@ import {
   writeAuth,
   writeSession,
 } from "./auth-storage";
+import { syncContentScriptsForWebsites } from "./site-profile/register-content-scripts";
 import type { ExtensionSession, LoginResponse } from "./types";
 
 const API_BASE = "http://localhost:3000";
@@ -91,9 +92,20 @@ async function refreshSession(): Promise<ExtensionSession> {
     const body = (await res.json().catch(() => ({}))) as { message?: string };
     throw new Error(body.message ?? `Profile request failed (${res.status})`);
   }
-  const profile = (await res.json()) as ExtensionSession;
+  const raw = (await res.json()) as ExtensionSession;
+  const profile: ExtensionSession = {
+    ...raw,
+    websites: Array.isArray(raw.websites) ? raw.websites : [],
+    organization: raw.organization
+      ? {
+          ...raw.organization,
+          websiteIds: raw.organization.websiteIds ?? [],
+        }
+      : null,
+  };
   await writeSession(profile);
   sessionLoadedAt = Date.now();
+  await syncContentScriptsForWebsites(profile.websites);
   return profile;
 }
 
@@ -484,5 +496,11 @@ chrome.runtime.onMessageExternal.addListener(
     return true;
   },
 );
+
+chrome.runtime.onInstalled.addListener(() => {
+  void syncContentScriptsForWebsites(undefined);
+});
+
+void syncContentScriptsForWebsites(undefined);
 
 console.log("[ManychatTranslator:bg] service worker loaded");

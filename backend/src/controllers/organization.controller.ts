@@ -4,9 +4,13 @@ import { Organization } from "../models/organization";
 import { User } from "../models/user";
 import type { AuthRequest } from "../middleware/check-auth";
 import { normalizeOrganizationTerms } from "../services/organizationTerms";
+import { normalizeWebsiteIds } from "../services/website.service";
+import { Website } from "../models/website";
+import { MANYCHAT_WEBSITE_SLUG } from "../data/manychatWebsiteSeed";
 import {
   formatOrganization,
   formatOrganizationPublic,
+  formatOrganizationWebsitesForSession,
   normalizeLanguage,
   normalizeOrganizationName,
   organizationDisplayName,
@@ -98,11 +102,18 @@ export async function createOrganization(
   }
 
   try {
+    let websiteIds = await normalizeWebsiteIds(req.body.websites);
+    if (websiteIds === null || websiteIds.length === 0) {
+      const manychat = await Website.findOne({ slug: MANYCHAT_WEBSITE_SLUG });
+      websiteIds = manychat ? [manychat._id] : [];
+    }
+
     const org = new Organization({
       name,
       language,
       translationContext,
       terms,
+      websites: websiteIds,
       password,
       createdBy: req.userData!.userId,
     });
@@ -167,6 +178,13 @@ export async function updateOrganization(
 
     if (req.body.terms !== undefined) {
       org.terms = normalizeOrganizationTerms(req.body.terms);
+    }
+
+    if (req.body.websites !== undefined) {
+      const websiteIds = await normalizeWebsiteIds(req.body.websites);
+      if (websiteIds !== null) {
+        org.websites = websiteIds;
+      }
     }
 
     const newPassword = String(req.body.password ?? "").trim();
@@ -245,6 +263,7 @@ export async function connectOrganization(
       language: user.language || "en",
       gender: user.gender || "",
       organization: formatOrganization(org),
+      websites: await formatOrganizationWebsitesForSession(org),
     });
   } catch (err) {
     console.error("[organizations] connect error:", err);

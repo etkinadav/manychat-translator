@@ -1,6 +1,18 @@
 import mongoose, { type Types } from "mongoose";
 import { Organization, type IOrganization } from "../models/organization";
 import type { IUser } from "../models/user";
+import {
+  formatWebsitePublic,
+  resolveOrganizationWebsites,
+} from "../services/website.service";
+
+export async function formatOrganizationWebsitesForSession(
+  org: IOrganization | null,
+) {
+  if (!org) return [];
+  const websites = await resolveOrganizationWebsites(org);
+  return websites.map(formatWebsitePublic);
+}
 
 export const ALLOWED_ORG_LANGUAGES = new Set([
   "en",
@@ -36,6 +48,7 @@ export function formatOrganization(org: IOrganization | null) {
     language: org.language,
     translationContext: org.translationContext ?? "",
     terms: formatTerms(org),
+    websiteIds: (org.websites ?? []).map((id) => String(id)),
   };
 }
 
@@ -46,6 +59,7 @@ export function formatOrganizationPublic(org: IOrganization) {
     language: org.language,
     translationContext: org.translationContext ?? "",
     terms: formatTerms(org),
+    websiteIds: (org.websites ?? []).map((id) => String(id)),
   };
 }
 

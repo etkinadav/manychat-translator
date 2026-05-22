@@ -7,6 +7,7 @@ export interface IOrganization extends Document {
   language: string;
   translationContext: string;
   terms: OrganizationTermCategory[];
+  websites: Types.ObjectId[];
   password: string;
   salt?: string;
   createdBy?: Types.ObjectId | null;
@@ -56,6 +57,10 @@ const organizationSchema = new mongoose.Schema<IOrganization>(
           },
         },
       ],
+      default: [],
+    },
+    websites: {
+      type: [{ type: mongoose.Schema.Types.ObjectId, ref: "Website" }],
       default: [],
     },
     password: { type: String, required: true },

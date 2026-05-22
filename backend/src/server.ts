@@ -3,6 +3,7 @@ import dotenv from "dotenv";
 import app from "./app";
 import { connectMongo } from "./db/mongoose";
 import { ensureProjectIdResolved } from "./services/googleTranslate.service";
+import { seedWebsites } from "./services/websiteSeed.service";
 
 // Load `.env` from backend/ (same pattern as beams app.js)
 dotenv.config();
@@ -13,6 +14,7 @@ const PORT = Number(process.env.PORT ?? 3000);
 async function startServer(): Promise<void> {
   try {
     await connectMongo();
+    await seedWebsites();
   } catch (err) {
     console.error("[server] MongoDB connection failed:", err);
     process.exit(1);

@@ -29,6 +29,7 @@ export class OrganizationsService {
     language: string;
     translationContext: string;
     terms: OrganizationTermCategory[];
+    websites: string[];
     password: string;
   }): Observable<{ organization: OrganizationDetails }> {
     return this.http.post<{ organization: OrganizationDetails }>(
@@ -44,6 +45,7 @@ export class OrganizationsService {
       language: string;
       translationContext: string;
       terms: OrganizationTermCategory[];
+      websites: string[];
       password?: string;
     },
   ): Observable<{ organization: OrganizationDetails }> {

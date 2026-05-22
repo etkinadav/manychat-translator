@@ -4,6 +4,7 @@ import type { AuthRequest } from "../middleware/check-auth";
 import {
   ALLOWED_ORG_LANGUAGES,
   formatOrganization,
+  formatOrganizationWebsitesForSession,
   resolveOrganizationField,
 } from "./organization.helpers";
 
@@ -21,6 +22,7 @@ export async function getProfile(req: AuthRequest, res: Response): Promise<void>
       language: user.language || "en",
       gender: user.gender || "",
       organization: formatOrganization(org),
+      websites: await formatOrganizationWebsitesForSession(org),
     });
   } catch (err) {
     console.error("[profile] getProfile error:", err);
@@ -65,6 +67,7 @@ export async function updateProfile(
       language: user.language,
       gender: user.gender || "",
       organization: formatOrganization(org),
+      websites: await formatOrganizationWebsitesForSession(org),
     });
   } catch (err) {
     console.error("[profile] updateProfile error:", err);
@@ -89,6 +92,7 @@ export async function disconnectOrganization(
       language: user.language || "en",
       gender: user.gender || "",
       organization: null,
+      websites: [],
     });
   } catch (err) {
     console.error("[profile] disconnectOrganization error:", err);
