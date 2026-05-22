@@ -1,14 +1,41 @@
 /*
  * Manychat Translator — injected styles
  *
- * Lifecycle classes on `.mc-ai-translation`:
- *   .loading  -> shows the 3-dot spinner
- *   .updated  -> plays a one-shot highlight sweep + pulse
- *   .error    -> red-tinted "translation failed" pill
+ * Explicit light-theme colors + opaque backgrounds so UI stays readable on
+ * WhatsApp Web dark mode and other hosts that override inherited color.
  */
 
+/* ── Design tokens (extension UI only) ─────────────────────────────────── */
+
+.mc-outgoing-toolbar,
+.mc-ai-translation,
+.mc-ai-translation-row,
+.mc-ai-gemini-result,
+.mc-conversation-summary,
+.mc-subscriber-gender-btn,
+.mc-ai-gemini-btn {
+  --mc-text: #1a1f36;
+  --mc-text-blue: #1d4ed8;
+  --mc-text-green: #1b6b3a;
+  --mc-text-red: #b3261e;
+  --mc-bg: #ffffff;
+  --mc-bg-muted: #f0f4f8;
+  --mc-bg-blue: #eff6ff;
+  --mc-bg-blue-hover: #dbeafe;
+  --mc-bg-green: #dcfce7;
+  --mc-bg-red: #fee2e2;
+  --mc-bg-translation: #fff8cc;
+  --mc-bg-translation-loading: #fff3a8;
+  --mc-border: #c5cdd8;
+  --mc-border-blue: #93c5fd;
+  --mc-border-green: #86efac;
+  --mc-border-red: #fca5a5;
+  color-scheme: light;
+  isolation: isolate;
+}
+
 /* ──────────────────────────────────────────────────────────────────────── */
-/* Base translation block                                                  */
+/* Incoming translation blocks                                               */
 /* ──────────────────────────────────────────────────────────────────────── */
 
 .mc-ai-translation-row {
@@ -16,11 +43,13 @@
   align-items: flex-start;
   gap: 6px;
   width: 100%;
+  color: var(--mc-text) !important;
 }
 
 .mc-ai-google-text {
   flex: 1;
   min-width: 0;
+  color: var(--mc-text) !important;
 }
 
 .mc-ai-gemini-btn {
@@ -31,35 +60,36 @@
   font-weight: 700;
   line-height: 1.2;
   letter-spacing: 0.02em;
-  font-family: inherit;
-  color: #1d4ed8;
-  background: rgba(37, 99, 235, 0.1);
-  border: 1px solid rgba(37, 99, 235, 0.35);
+  font-family: "Segoe UI", system-ui, sans-serif;
+  color: var(--mc-text-blue) !important;
+  -webkit-text-fill-color: var(--mc-text-blue) !important;
+  background-color: var(--mc-bg-blue) !important;
+  border: 1px solid var(--mc-border-blue) !important;
   border-radius: 4px;
   cursor: pointer;
   transition:
     background-color 0.15s ease,
-    opacity 0.15s ease;
+    border-color 0.15s ease;
 }
 
 .mc-ai-gemini-btn:hover:not(:disabled) {
-  background: rgba(37, 99, 235, 0.18);
+  background-color: var(--mc-bg-blue-hover) !important;
 }
 
 .mc-ai-gemini-btn:disabled {
   cursor: default;
-  opacity: 0.55;
+  opacity: 0.65;
 }
 
 .mc-ai-gemini-btn.loading {
-  opacity: 0.7;
   cursor: wait;
 }
 
 .mc-ai-gemini-btn.done {
-  color: #15803d;
-  border-color: rgba(21, 128, 61, 0.35);
-  background: rgba(21, 128, 61, 0.1);
+  color: var(--mc-text-green) !important;
+  -webkit-text-fill-color: var(--mc-text-green) !important;
+  border-color: var(--mc-border-green) !important;
+  background-color: var(--mc-bg-green) !important;
 }
 
 .mc-ai-gemini-result {
@@ -70,8 +100,9 @@
   font-size: 0.9em;
   font-weight: 700;
   line-height: 1.35;
-  color: inherit;
-  background: rgba(37, 99, 235, 0.08);
+  color: var(--mc-text) !important;
+  -webkit-text-fill-color: var(--mc-text) !important;
+  background-color: var(--mc-bg-blue) !important;
   white-space: pre-wrap;
   word-break: break-word;
   direction: ltr;
@@ -84,13 +115,15 @@
 .mc-ai-gemini-result.loading {
   font-weight: 500;
   font-style: italic;
-  opacity: 0.85;
+  color: var(--mc-text-blue) !important;
+  -webkit-text-fill-color: var(--mc-text-blue) !important;
 }
 
 .mc-ai-gemini-result.error {
   font-weight: 500;
-  color: #b3261e;
-  background: rgba(255, 0, 0, 0.08);
+  color: var(--mc-text-red) !important;
+  -webkit-text-fill-color: var(--mc-text-red) !important;
+  background-color: var(--mc-bg-red) !important;
 }
 
 .mc-ai-translation {
@@ -98,35 +131,29 @@
   position: relative;
   margin-top: 4px;
   padding: 4px 6px;
-  background: rgba(255, 255, 0, 0.15);
+  background-color: var(--mc-bg-translation) !important;
   border-radius: 6px;
   font-size: 0.9em;
   line-height: 1.35;
-  color: inherit;
-
+  color: var(--mc-text) !important;
+  -webkit-text-fill-color: var(--mc-text) !important;
   white-space: pre-wrap;
   word-break: break-word;
   overflow-wrap: anywhere;
-
-  /* Translated output is always English → force LTR. */
   direction: ltr;
   text-align: left;
   unicode-bidi: isolate;
-
   max-width: 100%;
   box-sizing: border-box;
   pointer-events: auto;
-
   overflow: hidden;
   transition: background-color 0.25s ease;
 }
 
-/* ──────────────────────────────────────────────────────────────────────── */
-/* Loading state + spinner                                                 */
-/* ──────────────────────────────────────────────────────────────────────── */
-
 .mc-ai-translation.loading {
-  background: rgba(255, 255, 0, 0.08);
+  background-color: var(--mc-bg-translation-loading) !important;
+  color: var(--mc-text) !important;
+  -webkit-text-fill-color: var(--mc-text) !important;
   min-height: 18px;
 }
 
@@ -135,6 +162,7 @@
   align-items: center;
   gap: 3px;
   height: 12px;
+  color: var(--mc-text-blue) !important;
 }
 
 .mc-spinner span {
@@ -142,8 +170,8 @@
   width: 5px;
   height: 5px;
   border-radius: 50%;
-  background: currentColor;
-  opacity: 0.45;
+  background-color: var(--mc-text-blue) !important;
+  opacity: 0.55;
   animation: mc-spinner-bounce 0.9s infinite ease-in-out;
 }
 
@@ -166,15 +194,10 @@
   }
 }
 
-/* ──────────────────────────────────────────────────────────────────────── */
-/* Updated state — one-shot highlight sweep                                */
-/* ──────────────────────────────────────────────────────────────────────── */
-
 .mc-ai-translation.updated {
   animation: mc-pulse 0.9s ease-out 1;
 }
 
-/* Light sweep that travels left-to-right across the block once. */
 .mc-ai-translation.updated::after {
   content: "";
   position: absolute;
@@ -183,9 +206,9 @@
   border-radius: inherit;
   background: linear-gradient(
     90deg,
-    rgba(255, 255, 255, 0) 0%,
-    rgba(120, 200, 255, 0.55) 50%,
-    rgba(255, 255, 255, 0) 100%
+    transparent 0%,
+    #bfdbfe 50%,
+    transparent 100%
   );
   transform: translateX(-100%);
   animation: mc-sweep 0.9s ease-out 1;
@@ -193,16 +216,16 @@
 
 @keyframes mc-pulse {
   0% {
-    background-color: rgba(120, 200, 255, 0.45);
-    box-shadow: 0 0 0 0 rgba(120, 200, 255, 0.45);
+    background-color: #bfdbfe;
+    box-shadow: 0 0 0 0 #93c5fd;
   }
   60% {
-    background-color: rgba(120, 200, 255, 0.2);
-    box-shadow: 0 0 0 6px rgba(120, 200, 255, 0);
+    background-color: #dbeafe;
+    box-shadow: 0 0 0 6px transparent;
   }
   100% {
-    background-color: rgba(255, 255, 0, 0.15);
-    box-shadow: 0 0 0 0 rgba(120, 200, 255, 0);
+    background-color: var(--mc-bg-translation);
+    box-shadow: 0 0 0 0 transparent;
   }
 }
 
@@ -215,18 +238,15 @@
   }
 }
 
-/* ──────────────────────────────────────────────────────────────────────── */
-/* Error state                                                             */
-/* ──────────────────────────────────────────────────────────────────────── */
-
 .mc-ai-translation.error {
-  background: rgba(255, 0, 0, 0.12);
-  color: #b3261e;
+  background-color: var(--mc-bg-red) !important;
+  color: var(--mc-text-red) !important;
+  -webkit-text-fill-color: var(--mc-text-red) !important;
   font-style: italic;
 }
 
 /* ──────────────────────────────────────────────────────────────────────── */
-/* Outgoing composer — gender selector + Translate to Hebrew               */
+/* Outgoing composer toolbar                                                 */
 /* ──────────────────────────────────────────────────────────────────────── */
 
 .mc-outgoing-toolbar {
@@ -237,13 +257,28 @@
   margin-top: 6px;
   max-width: 100%;
   box-sizing: border-box;
+  color: var(--mc-text) !important;
 }
 
-/* 24h expired window — inline with Manychat template toolbar */
 [class*="_toolbarContainer_"] .mc-outgoing-toolbar {
   margin-top: 0;
   margin-inline-end: 8px;
   flex-shrink: 0;
+}
+
+/* Shared toolbar control base (dark-mode safe) */
+.mc-outgoing-toolbar button,
+.mc-auto-translate-toggle,
+.mc-translate-to-hebrew-btn,
+.mc-conversation-summary-btn {
+  font-family: "Segoe UI", system-ui, sans-serif !important;
+  color: var(--mc-text) !important;
+  -webkit-text-fill-color: var(--mc-text) !important;
+  background-color: var(--mc-bg) !important;
+  border: 1px solid var(--mc-border) !important;
+  box-shadow: none !important;
+  filter: none !important;
+  mix-blend-mode: normal !important;
 }
 
 .mc-gender-selector {
@@ -251,11 +286,12 @@
   align-items: center;
   gap: 2px;
   padding: 2px;
-  border: 1px solid rgba(0, 0, 0, 0.12);
+  border: 1px solid var(--mc-border) !important;
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.85);
+  background-color: var(--mc-bg) !important;
   font-size: 11px;
   line-height: 1.2;
+  color: var(--mc-text) !important;
 }
 
 .mc-gender-option {
@@ -267,16 +303,21 @@
   border-radius: 4px;
   cursor: pointer;
   user-select: none;
+  color: var(--mc-text) !important;
+  -webkit-text-fill-color: var(--mc-text) !important;
 }
 
 .mc-gender-option:has(input:checked) {
-  background: rgba(60, 120, 200, 0.15);
+  background-color: var(--mc-bg-blue) !important;
+  color: var(--mc-text-blue) !important;
+  -webkit-text-fill-color: var(--mc-text-blue) !important;
   font-weight: 600;
 }
 
 .mc-gender-option input {
   margin: 0;
   cursor: pointer;
+  accent-color: var(--mc-text-blue);
 }
 
 .mc-auto-translate-toggle {
@@ -285,35 +326,33 @@
   padding: 4px 10px;
   font-size: 12px;
   line-height: 1.3;
-  font-family: inherit;
-  color: inherit;
-  background: rgba(255, 255, 255, 0.9);
-  border: 1px solid rgba(0, 0, 0, 0.15);
   border-radius: 6px;
   cursor: pointer;
   box-sizing: border-box;
   text-transform: lowercase;
   transition:
     background-color 0.15s ease,
-    border-color 0.15s ease,
-    opacity 0.15s ease;
+    border-color 0.15s ease;
 }
 
 .mc-auto-translate-toggle:hover:not(:disabled) {
-  background: rgba(240, 248, 255, 1);
-  border-color: rgba(60, 120, 200, 0.45);
+  background-color: var(--mc-bg-blue-hover) !important;
+  border-color: var(--mc-border-blue) !important;
+  color: var(--mc-text-blue) !important;
+  -webkit-text-fill-color: var(--mc-text-blue) !important;
 }
 
 .mc-auto-translate-toggle.active {
-  border-color: rgba(40, 140, 80, 0.55);
-  color: #1b6b3a;
-  background: rgba(220, 255, 230, 0.95);
+  border-color: var(--mc-border-green) !important;
+  color: var(--mc-text-green) !important;
+  -webkit-text-fill-color: var(--mc-text-green) !important;
+  background-color: var(--mc-bg-green) !important;
   font-weight: 600;
 }
 
 .mc-auto-translate-toggle:disabled {
   cursor: not-allowed;
-  opacity: 0.6;
+  opacity: 0.65;
 }
 
 .mc-translate-to-hebrew-btn {
@@ -322,47 +361,50 @@
   padding: 4px 10px;
   font-size: 12px;
   line-height: 1.3;
-  font-family: inherit;
-  color: inherit;
-  background: rgba(255, 255, 255, 0.9);
-  border: 1px solid rgba(0, 0, 0, 0.15);
   border-radius: 6px;
   cursor: pointer;
   box-sizing: border-box;
   max-width: 100%;
   transition:
     background-color 0.15s ease,
-    border-color 0.15s ease,
-    opacity 0.15s ease;
+    border-color 0.15s ease;
 }
 
 .mc-translate-to-hebrew-btn:hover:not(:disabled) {
-  background: rgba(240, 248, 255, 1);
-  border-color: rgba(60, 120, 200, 0.45);
+  background-color: var(--mc-bg-blue-hover) !important;
+  border-color: var(--mc-border-blue) !important;
+  color: var(--mc-text-blue) !important;
+  -webkit-text-fill-color: var(--mc-text-blue) !important;
 }
 
 .mc-translate-to-hebrew-btn:disabled {
   cursor: wait;
-  opacity: 0.75;
+  opacity: 0.8;
+  color: var(--mc-text) !important;
+  -webkit-text-fill-color: var(--mc-text) !important;
 }
 
 .mc-translate-to-hebrew-btn.loading {
   font-style: italic;
+  color: var(--mc-text-blue) !important;
+  -webkit-text-fill-color: var(--mc-text-blue) !important;
 }
 
 .mc-translate-to-hebrew-btn.success {
-  border-color: rgba(40, 140, 80, 0.5);
-  color: #1b6b3a;
-  background: rgba(220, 255, 230, 0.95);
+  border-color: var(--mc-border-green) !important;
+  color: var(--mc-text-green) !important;
+  -webkit-text-fill-color: var(--mc-text-green) !important;
+  background-color: var(--mc-bg-green) !important;
 }
 
 .mc-translate-to-hebrew-btn.error {
-  border-color: rgba(200, 60, 60, 0.45);
-  color: #b3261e;
-  background: rgba(255, 240, 240, 0.95);
+  border-color: var(--mc-border-red) !important;
+  color: var(--mc-text-red) !important;
+  -webkit-text-fill-color: var(--mc-text-red) !important;
+  background-color: var(--mc-bg-red) !important;
 }
 
-/* Subscriber name gender (Manychat header) */
+/* Subscriber name gender (Manychat header) — blue action style */
 
 .mc-subscriber-gender-btn {
   display: inline-block;
@@ -371,41 +413,42 @@
   font-size: 11px;
   font-weight: 600;
   line-height: 1.3;
-  font-family: inherit;
+  font-family: "Segoe UI", system-ui, sans-serif;
   vertical-align: middle;
-  color: #1d4ed8;
-  background: rgba(37, 99, 235, 0.1);
-  border: 1px solid rgba(37, 99, 235, 0.35);
+  color: var(--mc-text-blue) !important;
+  -webkit-text-fill-color: var(--mc-text-blue) !important;
+  background-color: var(--mc-bg-blue) !important;
+  border: 1px solid var(--mc-border-blue) !important;
   border-radius: 4px;
   cursor: pointer;
 }
 
 .mc-subscriber-gender-btn:hover:not(:disabled) {
-  background: rgba(37, 99, 235, 0.18);
+  background-color: var(--mc-bg-blue-hover) !important;
 }
 
 .mc-subscriber-gender-btn:disabled {
   cursor: default;
+  opacity: 0.75;
 }
 
 .mc-subscriber-gender-btn.loading {
   font-style: italic;
-  opacity: 0.75;
 }
 
 .mc-subscriber-gender-btn.done {
-  color: #15803d;
-  border-color: rgba(21, 128, 61, 0.35);
-  background: rgba(21, 128, 61, 0.1);
+  color: var(--mc-text-green) !important;
+  -webkit-text-fill-color: var(--mc-text-green) !important;
+  border-color: var(--mc-border-green) !important;
+  background-color: var(--mc-bg-green) !important;
 }
 
 .mc-subscriber-gender-btn.error {
-  color: #b3261e;
-  border-color: rgba(179, 38, 30, 0.35);
-  background: rgba(179, 38, 30, 0.08);
+  color: var(--mc-text-red) !important;
+  -webkit-text-fill-color: var(--mc-text-red) !important;
+  border-color: var(--mc-border-red) !important;
+  background-color: var(--mc-bg-red) !important;
 }
-
-/* Conversation summary button (composer toolbar) */
 
 .mc-conversation-summary-btn {
   display: inline-block;
@@ -413,37 +456,41 @@
   padding: 4px 10px;
   font-size: 12px;
   line-height: 1.3;
-  font-family: inherit;
-  color: inherit;
-  background: rgba(255, 255, 255, 0.9);
-  border: 1px solid rgba(0, 0, 0, 0.15);
   border-radius: 6px;
   cursor: pointer;
 }
 
 .mc-conversation-summary-btn:hover:not(:disabled) {
-  background: rgba(248, 250, 252, 1);
-  border-color: rgba(60, 120, 200, 0.45);
+  background-color: var(--mc-bg-muted) !important;
+  border-color: var(--mc-border-blue) !important;
+  color: var(--mc-text-blue) !important;
+  -webkit-text-fill-color: var(--mc-text-blue) !important;
 }
 
 .mc-conversation-summary-btn:disabled {
   cursor: not-allowed;
-  opacity: 0.6;
+  opacity: 0.65;
 }
 
 .mc-conversation-summary-btn.loading {
   font-style: italic;
   cursor: wait;
+  color: var(--mc-text-blue) !important;
+  -webkit-text-fill-color: var(--mc-text-blue) !important;
 }
 
 .mc-conversation-summary-btn.success {
-  border-color: rgba(40, 140, 80, 0.5);
-  color: #1b6b3a;
+  border-color: var(--mc-border-green) !important;
+  color: var(--mc-text-green) !important;
+  -webkit-text-fill-color: var(--mc-text-green) !important;
+  background-color: var(--mc-bg-green) !important;
 }
 
 .mc-conversation-summary-btn.error {
-  border-color: rgba(200, 60, 60, 0.45);
-  color: #b3261e;
+  border-color: var(--mc-border-red) !important;
+  color: var(--mc-text-red) !important;
+  -webkit-text-fill-color: var(--mc-text-red) !important;
+  background-color: var(--mc-bg-red) !important;
 }
 
 /* Summary block at end of chat thread */
@@ -452,20 +499,22 @@
   display: block;
   margin: 12px 8px 16px;
   padding: 12px 14px;
-  border: 1px solid rgba(37, 99, 235, 0.35);
+  border: 1px solid var(--mc-border-blue) !important;
   border-radius: 10px;
-  background: rgba(37, 99, 235, 0.06);
+  background-color: var(--mc-bg-blue) !important;
   box-sizing: border-box;
   max-width: 100%;
   direction: ltr;
   text-align: left;
+  color: var(--mc-text) !important;
 }
 
 .mc-conversation-summary__title {
   margin: 0 0 8px;
   font-size: 14px;
   font-weight: 700;
-  color: #1d4ed8;
+  color: var(--mc-text-blue) !important;
+  -webkit-text-fill-color: var(--mc-text-blue) !important;
 }
 
 .mc-conversation-summary__body {
@@ -473,5 +522,79 @@
   line-height: 1.45;
   white-space: pre-wrap;
   word-break: break-word;
-  color: inherit;
+  color: var(--mc-text) !important;
+  -webkit-text-fill-color: var(--mc-text) !important;
+}
+
+/* WhatsApp / host dark mode — re-assert extension palette */
+@media (prefers-color-scheme: dark) {
+  .mc-outgoing-toolbar button,
+  .mc-auto-translate-toggle,
+  .mc-translate-to-hebrew-btn,
+  .mc-conversation-summary-btn {
+    color: var(--mc-text) !important;
+    -webkit-text-fill-color: var(--mc-text) !important;
+    background-color: var(--mc-bg) !important;
+    border-color: var(--mc-border) !important;
+  }
+
+  .mc-auto-translate-toggle:hover:not(:disabled),
+  .mc-translate-to-hebrew-btn:hover:not(:disabled),
+  .mc-conversation-summary-btn:hover:not(:disabled) {
+    color: var(--mc-text-blue) !important;
+    -webkit-text-fill-color: var(--mc-text-blue) !important;
+    background-color: var(--mc-bg-blue-hover) !important;
+  }
+
+  .mc-auto-translate-toggle.active,
+  .mc-translate-to-hebrew-btn.success,
+  .mc-conversation-summary-btn.success {
+    color: var(--mc-text-green) !important;
+    -webkit-text-fill-color: var(--mc-text-green) !important;
+    background-color: var(--mc-bg-green) !important;
+  }
+
+  .mc-translate-to-hebrew-btn.loading,
+  .mc-conversation-summary-btn.loading {
+    color: var(--mc-text-blue) !important;
+    -webkit-text-fill-color: var(--mc-text-blue) !important;
+  }
+
+  .mc-translate-to-hebrew-btn.error,
+  .mc-conversation-summary-btn.error,
+  .mc-ai-translation.error,
+  .mc-ai-gemini-result.error {
+    color: var(--mc-text-red) !important;
+    -webkit-text-fill-color: var(--mc-text-red) !important;
+  }
+
+  .mc-ai-gemini-btn,
+  .mc-subscriber-gender-btn {
+    color: var(--mc-text-blue) !important;
+    -webkit-text-fill-color: var(--mc-text-blue) !important;
+    background-color: var(--mc-bg-blue) !important;
+  }
+
+  .mc-ai-translation,
+  .mc-ai-gemini-result,
+  .mc-ai-google-text {
+    color: var(--mc-text) !important;
+    -webkit-text-fill-color: var(--mc-text) !important;
+  }
+
+  .mc-ai-translation {
+    background-color: var(--mc-bg-translation) !important;
+  }
+
+  .mc-gender-selector,
+  .mc-gender-option {
+    color: var(--mc-text) !important;
+    -webkit-text-fill-color: var(--mc-text) !important;
+    background-color: var(--mc-bg) !important;
+  }
+
+  .mc-gender-option:has(input:checked) {
+    color: var(--mc-text-blue) !important;
+    -webkit-text-fill-color: var(--mc-text-blue) !important;
+  }
 }
