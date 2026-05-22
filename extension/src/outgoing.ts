@@ -1114,7 +1114,13 @@ async function runOutgoingTranslate(
 }
 
 async function onGoogleTranslateClick(btn: HTMLButtonElement): Promise<void> {
-  const session = await ensureSession();
+  let session: ExtensionSession | null = null;
+  try {
+    session = await fetchSession(true);
+    cachedSession = session;
+  } catch {
+    session = await ensureSession();
+  }
   if (!session?.organization) {
     setButtonState(btn, "error");
     scheduleButtonReset(btn, "default", ERROR_RESET_MS);

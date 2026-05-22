@@ -24,6 +24,7 @@ import { summarizeConversation } from "../services/geminiConversationSummary.ser
 import { detectSubscriberNameGender } from "../services/geminiNameGender.service";
 import { buildGoogleOutgoingPrompt } from "../services/googleOutgoingPrompt.service";
 import { cleanOutgoingTranslation } from "../services/outgoingPromptCleanup.service";
+import { polishHebrewOutgoingTranslation } from "../services/hebrewOutgoingPolish.service";
 import { organizationDisplayName } from "./organization.helpers";
 import { resolveLanguagePairFromProfile } from "../services/translateLanguagePair";
 import { resolveTranslateOrganizationContext } from "./translateOrganizationContext";
@@ -158,10 +159,17 @@ export async function translateBatch(
 
       if (body.outgoingGoogle === true) {
         const customerGender = parseCustomerGender(body?.customerGender);
-        const agentGender = parseAgentGender(
-          body?.agentGender,
-          user.gender || "male",
-        );
+        // Agent gender always from the signed-in user profile (not extension cache).
+        const agentGender = parseAgentGender(user.gender, "male");
+        if (
+          body?.agentGender &&
+          body.agentGender !== agentGender &&
+          (body.agentGender === "male" || body.agentGender === "female")
+        ) {
+          console.warn(
+            `[translate] outgoing-google agentGender body=${body.agentGender} ignored; using profile=${agentGender}`,
+          );
+        }
         const { source: sourceLanguage, target: targetLanguage } =
           resolveLanguagePairFromProfile({
             userLanguage: user.language || "en",
@@ -188,7 +196,13 @@ export async function translateBatch(
           targetLanguage,
           sourceLanguage,
         );
-        const translated = cleanOutgoingTranslation(raw[0] ?? messageText);
+        const cleaned = cleanOutgoingTranslation(raw[0] ?? messageText);
+        const translated = polishHebrewOutgoingTranslation(
+          cleaned,
+          targetLanguage,
+          customerGender,
+          agentGender,
+        );
         res.status(200).json({ translations: [translated] });
         return;
       }

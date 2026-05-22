@@ -9,9 +9,6 @@ function resolveAgentGender(
 
 /**
  * Google outgoing — English-only instructions, colon before the user message.
- *
- * Hebrew hints inside the prompt get translated and echoed in the output.
- * `cleanOutgoingTranslation` strips the instruction block after translation.
  */
 export function buildGoogleOutgoingPrompt(
   messageText: string,
@@ -24,5 +21,15 @@ export function buildGoogleOutgoingPrompt(
   const customer = customerGender;
   const body = messageText.trim();
 
-  return `Translate to ${targetLabel}. I am a ${agent} agent writing to a ${customer} customer: ${body}`;
+  const agentClause =
+    agent === "female"
+      ? "The writer is a female agent. Use feminine first person in Hebrew (e.g. representative as female, can-help as female)."
+      : "The writer is a male agent. Use masculine first person in Hebrew.";
+
+  const customerClause =
+    customer === "female"
+      ? "The reader is one female customer. Use singular informal your, not plural."
+      : "The reader is one male customer. Use singular informal your, not plural.";
+
+  return `Translate to ${targetLabel}. ${agentClause} ${customerClause} Message: ${body}`;
 }
