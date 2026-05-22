@@ -89,12 +89,27 @@ async function ensureSession(): Promise<ExtensionSession | null> {
   }
 }
 
-function findComposerTextarea(): HTMLTextAreaElement | null {
-  return document.querySelector<HTMLTextAreaElement>(dom().composer.textarea);
+type ComposerField = HTMLTextAreaElement | HTMLElement;
+
+function findComposerField(): ComposerField | null {
+  const el = document.querySelector(dom().composer.textarea);
+  if (!el || !(el instanceof HTMLElement)) return null;
+  if (el instanceof HTMLTextAreaElement) return el;
+  if (el.isContentEditable) return el;
+  return null;
 }
 
-function findToolbarForTextarea(textarea: HTMLTextAreaElement): HTMLElement | null {
-  const next = textarea.nextElementSibling;
+function isComposerTextarea(field: ComposerField): field is HTMLTextAreaElement {
+  return field instanceof HTMLTextAreaElement;
+}
+
+function getComposerText(field: ComposerField): string {
+  if (isComposerTextarea(field)) return field.value.trim();
+  return (field.textContent ?? "").trim();
+}
+
+function findToolbarForComposer(composer: ComposerField): HTMLElement | null {
+  const next = composer.nextElementSibling;
   if (next instanceof HTMLElement && next.hasAttribute(TOOLBAR_ATTR)) {
     return next;
   }
@@ -131,7 +146,7 @@ function findExpiredConversationAnchor(): HTMLElement | null {
 }
 
 function removeOrphanedToolbars(
-  activeTextarea: HTMLTextAreaElement | null,
+  activeComposer: ComposerField | null,
   expiredAnchor: HTMLElement | null,
 ): void {
   for (const toolbar of document.querySelectorAll<HTMLElement>(
@@ -154,7 +169,7 @@ function removeOrphanedToolbars(
       continue;
     }
 
-    if (!activeTextarea || toolbar.previousElementSibling !== activeTextarea) {
+    if (!activeComposer || toolbar.previousElementSibling !== activeComposer) {
       toolbar.remove();
     }
   }
@@ -587,6 +602,162 @@ function focusTextareaEnd(textarea: HTMLTextAreaElement): void {
   textarea.setSelectionRange(len, len);
 }
 
+function normalizeComposerText(text: string): string {
+  return text.replace(/\s+/g, " ").trim();
+}
+
+function contentEditableShowsText(el: HTMLElement, expected: string): boolean {
+  const got = normalizeComposerText(el.textContent ?? "");
+  const want = normalizeComposerText(expected);
+  return got === want || (want.length > 0 && got.includes(want));
+}
+
+function selectAllInContentEditable(el: HTMLElement): void {
+  el.focus();
+  if (typeof document.execCommand === "function") {
+    document.execCommand("selectAll", false);
+  }
+  const selection = window.getSelection();
+  if (!selection) return;
+  const range = document.createRange();
+  range.selectNodeContents(el);
+  selection.removeAllRanges();
+  selection.addRange(range);
+}
+
+function dispatchSyntheticPaste(el: HTMLElement, text: string): boolean {
+  const dt = new DataTransfer();
+  dt.setData("text/plain", text);
+  try {
+    const paste = new ClipboardEvent("paste", {
+      bubbles: true,
+      cancelable: true,
+      clipboardData: dt,
+    });
+    return el.dispatchEvent(paste);
+  } catch {
+    const paste = new ClipboardEvent("paste", {
+      bubbles: true,
+      cancelable: true,
+    });
+    Object.defineProperty(paste, "clipboardData", {
+      value: dt,
+      enumerable: true,
+    });
+    return el.dispatchEvent(paste);
+  }
+}
+
+function dispatchInsertReplacementText(el: HTMLElement, text: string): void {
+  const before = new InputEvent("beforeinput", {
+    bubbles: true,
+    cancelable: true,
+    inputType: "insertReplacementText",
+    data: text,
+  });
+  el.dispatchEvent(before);
+  if (before.defaultPrevented) {
+    el.dispatchEvent(
+      new InputEvent("input", {
+        bubbles: true,
+        inputType: "insertReplacementText",
+        data: text,
+      }),
+    );
+  }
+}
+
+function execDeleteAndInsertText(el: HTMLElement, text: string): void {
+  if (typeof document.execCommand !== "function") return;
+  selectAllInContentEditable(el);
+  document.execCommand("delete", false);
+  document.execCommand("insertText", false, text);
+}
+
+function setContentEditableDomFallback(el: HTMLElement, value: string): void {
+  const block =
+    el.querySelector<HTMLElement>('span[data-lexical-text="true"]') ??
+    el.querySelector("p") ??
+    el;
+  block.textContent = value;
+  el.dispatchEvent(
+    new InputEvent("input", {
+      bubbles: true,
+      cancelable: true,
+      inputType: "insertText",
+      data: value,
+    }),
+  );
+}
+
+function waitForComposerPaint(): Promise<void> {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+  });
+}
+
+/** WhatsApp Web (Lexical) ignores plain DOM writes; drive editor via input/paste commands. */
+async function setContentEditableValue(
+  el: HTMLElement,
+  value: string,
+): Promise<void> {
+  const strategies: Array<() => void> = [
+    () => {
+      selectAllInContentEditable(el);
+      dispatchInsertReplacementText(el, value);
+    },
+    () => {
+      selectAllInContentEditable(el);
+      dispatchSyntheticPaste(el, value);
+    },
+    () => execDeleteAndInsertText(el, value),
+    () => {
+      selectAllInContentEditable(el);
+      if (typeof document.execCommand === "function") {
+        document.execCommand("insertText", false, value);
+      }
+    },
+    () => setContentEditableDomFallback(el, value),
+  ];
+
+  for (const run of strategies) {
+    run();
+    if (contentEditableShowsText(el, value)) return;
+    await waitForComposerPaint();
+    if (contentEditableShowsText(el, value)) return;
+  }
+
+  warn("contenteditable write did not stick (Lexical composer?)", {
+    expectedChars: value.length,
+    got: normalizeComposerText(el.textContent ?? ""),
+  });
+}
+
+async function setComposerValue(
+  field: ComposerField,
+  value: string,
+): Promise<void> {
+  if (isComposerTextarea(field)) {
+    setTextareaValue(field, value);
+    return;
+  }
+  await setContentEditableValue(field, value);
+}
+
+function focusComposerEnd(field: ComposerField): void {
+  if (isComposerTextarea(field)) {
+    focusTextareaEnd(field);
+    return;
+  }
+  field.focus();
+  const selection = window.getSelection();
+  const range = document.createRange();
+  range.selectNodeContents(field);
+  range.collapse(false);
+  selection?.removeAllRanges();
+  selection?.addRange(range);
+}
+
 function logGeminiPromptInPage(prompt: string): void {
   console.log(
     "%c[ManychatTranslator] GEMINI PROMPT",
@@ -659,13 +830,13 @@ async function onTranslateClick(btn: HTMLButtonElement): Promise<void> {
     return;
   }
 
-  const textarea = findComposerTextarea();
-  if (!textarea) {
-    warn("textarea not found on click");
+  const composer = findComposerField();
+  if (!composer) {
+    warn("composer not found on click");
     return;
   }
 
-  const userText = textarea.value.trim();
+  const userText = getComposerText(composer);
   if (!userText) return;
 
   const toolbar = btn.closest<HTMLElement>(`[${TOOLBAR_ATTR}]`);
@@ -706,9 +877,9 @@ async function onTranslateClick(btn: HTMLButtonElement): Promise<void> {
       return;
     }
 
-    const liveTextarea = findComposerTextarea() ?? textarea;
-    setTextareaValue(liveTextarea, translated);
-    focusTextareaEnd(liveTextarea);
+    const liveComposer = findComposerField() ?? composer;
+    await setComposerValue(liveComposer, translated);
+    focusComposerEnd(liveComposer);
     setButtonState(btn, "success");
     scheduleButtonReset(btn, "default", SUCCESS_RESET_MS);
   } catch (err) {
@@ -718,8 +889,8 @@ async function onTranslateClick(btn: HTMLButtonElement): Promise<void> {
   }
 }
 
-function ensureComposerToolbar(textarea: HTMLTextAreaElement): boolean {
-  const existing = findToolbarForTextarea(textarea);
+function ensureComposerToolbar(composer: ComposerField): boolean {
+  const existing = findToolbarForComposer(composer);
   if (existing) {
     existing.setAttribute(TOOLBAR_MODE_ATTR, TOOLBAR_MODE_COMPOSER);
     ensureToolbarButtons(existing, true);
@@ -728,7 +899,7 @@ function ensureComposerToolbar(textarea: HTMLTextAreaElement): boolean {
   }
 
   const toolbar = createOutgoingToolbar(true);
-  textarea.insertAdjacentElement("afterend", toolbar);
+  composer.insertAdjacentElement("afterend", toolbar);
   ensureToolbarButtons(toolbar, true);
   syncToolbarSession(toolbar);
   return true;
@@ -753,15 +924,15 @@ function ensureExpiredConversationToolbar(anchor: HTMLElement): boolean {
 }
 
 function ensureOutgoingToolbars(): boolean {
-  const textarea = findComposerTextarea();
+  const composer = findComposerField();
   const expiredAnchor = findExpiredConversationAnchor();
-  removeOrphanedToolbars(textarea, expiredAnchor);
+  removeOrphanedToolbars(composer, expiredAnchor);
 
   let ensured = false;
   if (expiredAnchor) {
     ensured = ensureExpiredConversationToolbar(expiredAnchor) || ensured;
-  } else if (textarea) {
-    ensured = ensureComposerToolbar(textarea) || ensured;
+  } else if (composer) {
+    ensured = ensureComposerToolbar(composer) || ensured;
   }
 
   document

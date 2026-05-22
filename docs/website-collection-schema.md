@@ -2,6 +2,14 @@
 
 מסמך זה מתאר את **אלמנט יחיד** בקולקשן `websites`. כל רשומה = פרופיל DOM והרשאות URL לאתר אחד (Manychat, WhatsApp Web, וכו').
 
+**מקור האמת:** MongoDB. התוסף טוען `domProfile` ו-`urlPatterns` מ-`GET /api/user/profile` → `websites[]`. אין צורך בקובץ TypeScript ב-backend לכל אתר חדש.
+
+**הוספה ידנית ל-DB:** קבצי JSON מוכנים להדבקה ב-Compass / `insertOne`:
+
+- `docs/seeds/whatsapp-web.website.json` — WhatsApp Web (`slug: whatsapp-web`)
+
+אחרי ה-insert: הוסף את `_id` של המסמך ל-`organizations.websites[]`, והתחבר מחדש מהתוסף.
+
 ---
 
 ## שדות ברמת המסמך

@@ -2,7 +2,7 @@ import { manychatWebsiteSeed } from "../data/manychatWebsiteSeed";
 import { Organization } from "../models/organization";
 import { Website } from "../models/website";
 
-/** Ensure Manychat website exists; attach to orgs with no websites. */
+/** Dev bootstrap: ensures Manychat exists. Other sites (e.g. WhatsApp) belong in DB only — see docs/seeds/*.json */
 export async function seedWebsites(): Promise<void> {
   let manychat = await Website.findOne({ slug: manychatWebsiteSeed.slug });
   if (!manychat) {
@@ -14,15 +14,17 @@ export async function seedWebsites(): Promise<void> {
     console.log("[seed] updated website:", manychat.slug);
   }
 
+  const defaultSite = manychat;
+
   const result = await Organization.updateMany(
     {
       $or: [{ websites: { $exists: false } }, { websites: { $size: 0 } }],
     },
-    { $set: { websites: [manychat._id] } },
+    { $set: { websites: [defaultSite._id] } },
   );
   if (result.modifiedCount > 0) {
     console.log(
-      `[seed] linked manychat to ${result.modifiedCount} organization(s)`,
+      `[seed] linked default site (${defaultSite.slug}) to ${result.modifiedCount} organization(s)`,
     );
   }
 }
