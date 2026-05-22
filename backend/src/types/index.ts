@@ -12,6 +12,8 @@ export interface TranslateRequest {
   outgoing?: boolean;
   /** Outgoing composer via Google Translate only (no Gemini). */
   outgoingGoogle?: boolean;
+  /** Agent gender from extension session (overrides profile when sent). */
+  agentGender?: "male" | "female";
   /** Per-message incoming customer text → Gemini (extension AI button). */
   incomingGemini?: boolean;
   /** Customer gender for Gemini prompts (extension UI). Default: male. */

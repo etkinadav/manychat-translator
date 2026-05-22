@@ -10,7 +10,10 @@ import {
   isTranslationFatalError,
   translateTexts,
 } from "../services/googleTranslate.service";
-import { parseCustomerGender } from "../services/customerGender";
+import {
+  parseAgentGender,
+  parseCustomerGender,
+} from "../services/customerGender";
 import { isGeminiOutgoingDryRunEnabled } from "../services/geminiOutgoingPrompt.service";
 import { runGeminiIncomingTranslate } from "../services/geminiIncomingTranslate.service";
 import {
@@ -19,6 +22,7 @@ import {
 } from "../services/geminiOutgoingTranslate.service";
 import { summarizeConversation } from "../services/geminiConversationSummary.service";
 import { detectSubscriberNameGender } from "../services/geminiNameGender.service";
+import { buildGoogleOutgoingPrompt } from "../services/googleOutgoingPrompt.service";
 import { cleanOutgoingTranslation } from "../services/outgoingPromptCleanup.service";
 import { organizationDisplayName } from "./organization.helpers";
 import { resolveLanguagePairFromProfile } from "../services/translateLanguagePair";
@@ -153,6 +157,11 @@ export async function translateBatch(
       }
 
       if (body.outgoingGoogle === true) {
+        const customerGender = parseCustomerGender(body?.customerGender);
+        const agentGender = parseAgentGender(
+          body?.agentGender,
+          user.gender || "male",
+        );
         const { source: sourceLanguage, target: targetLanguage } =
           resolveLanguagePairFromProfile({
             userLanguage: user.language || "en",
@@ -160,12 +169,22 @@ export async function translateBatch(
             outgoing: true,
           });
 
+        const promptText = buildGoogleOutgoingPrompt(
+          messageText,
+          targetLanguage,
+          agentGender,
+          customerGender,
+        );
+
         console.log(
-          `[translate] outgoing-google | user=${String(user._id)} org=${String(org._id)} | ${sourceLanguage} -> ${targetLanguage} | chars=${messageText.length}`,
+          `[translate] outgoing-google | user=${String(user._id)} org=${String(org._id)} | ${sourceLanguage} -> ${targetLanguage} | agent=${agentGender} | customer=${customerGender} | chars=${messageText.length}`,
+        );
+        console.log(
+          `[translate] outgoing-google prompt:\n${promptText.slice(0, 500)}`,
         );
 
         const raw = await translateTexts(
-          [messageText],
+          [promptText],
           targetLanguage,
           sourceLanguage,
         );

@@ -1010,7 +1010,11 @@ interface OutgoingTranslateResult {
   dryRun?: boolean;
 }
 
-function postTranslateOutgoingGoogle(userText: string): Promise<string> {
+function postTranslateOutgoingGoogle(
+  userText: string,
+  customerGender: CustomerGender,
+  agentGender: "" | "male" | "female",
+): Promise<string> {
   return new Promise((resolve, reject) => {
     const timeout = window.setTimeout(
       () => reject(new Error("backend request timed out")),
@@ -1021,6 +1025,10 @@ function postTranslateOutgoingGoogle(userText: string): Promise<string> {
         type: "translate",
         texts: [userText],
         outgoingGoogle: true,
+        customerGender,
+        ...(agentGender === "female" || agentGender === "male"
+          ? { agentGender }
+          : {}),
       },
       (response: CsTranslateReply | undefined) => {
         window.clearTimeout(timeout);
@@ -1122,16 +1130,29 @@ async function onGoogleTranslateClick(btn: HTMLButtonElement): Promise<void> {
   const userText = getComposerText(composer);
   if (!userText) return;
 
+  const toolbar = btn.closest<HTMLElement>(`[${TOOLBAR_ATTR}]`);
+  const customerGender = toolbar
+    ? readCustomerGenderFromToolbar(toolbar)
+    : await readCustomerGender();
+
   outgoingTranslateInProgress = true;
   setButtonState(btn, "loading");
   log("outgoing translate requested (Google path)", {
     chars: userText.length,
     userLanguage: session.language,
     orgLanguage: session.organization.language,
+    agentGender: session.gender || "(profile default)",
+    customerGender,
   });
 
   try {
-    const translation = (await postTranslateOutgoingGoogle(userText)).trim();
+    const translation = (
+      await postTranslateOutgoingGoogle(
+        userText,
+        customerGender,
+        session.gender,
+      )
+    ).trim();
     if (!translation) {
       setButtonState(btn, "error");
       scheduleButtonReset(btn, "default", ERROR_RESET_MS);
