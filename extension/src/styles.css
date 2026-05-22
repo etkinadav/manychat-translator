@@ -270,6 +270,7 @@
 .mc-outgoing-toolbar button,
 .mc-auto-translate-toggle,
 .mc-translate-to-hebrew-btn,
+.mc-translate-google-btn,
 .mc-conversation-summary-btn {
   font-family: "Segoe UI", system-ui, sans-serif !important;
   color: var(--mc-text) !important;
@@ -355,11 +356,13 @@
   opacity: 0.65;
 }
 
-.mc-translate-to-hebrew-btn {
+.mc-translate-to-hebrew-btn,
+.mc-translate-google-btn {
   display: inline-block;
   margin-top: 0;
   padding: 4px 10px;
   font-size: 12px;
+  font-weight: 700;
   line-height: 1.3;
   border-radius: 6px;
   cursor: pointer;
@@ -370,34 +373,39 @@
     border-color 0.15s ease;
 }
 
-.mc-translate-to-hebrew-btn:hover:not(:disabled) {
+.mc-translate-to-hebrew-btn:hover:not(:disabled),
+.mc-translate-google-btn:hover:not(:disabled) {
   background-color: var(--mc-bg-blue-hover) !important;
   border-color: var(--mc-border-blue) !important;
   color: var(--mc-text-blue) !important;
   -webkit-text-fill-color: var(--mc-text-blue) !important;
 }
 
-.mc-translate-to-hebrew-btn:disabled {
+.mc-translate-to-hebrew-btn:disabled,
+.mc-translate-google-btn:disabled {
   cursor: wait;
   opacity: 0.8;
   color: var(--mc-text) !important;
   -webkit-text-fill-color: var(--mc-text) !important;
 }
 
-.mc-translate-to-hebrew-btn.loading {
+.mc-translate-to-hebrew-btn.loading,
+.mc-translate-google-btn.loading {
   font-style: italic;
   color: var(--mc-text-blue) !important;
   -webkit-text-fill-color: var(--mc-text-blue) !important;
 }
 
-.mc-translate-to-hebrew-btn.success {
+.mc-translate-to-hebrew-btn.success,
+.mc-translate-google-btn.success {
   border-color: var(--mc-border-green) !important;
   color: var(--mc-text-green) !important;
   -webkit-text-fill-color: var(--mc-text-green) !important;
   background-color: var(--mc-bg-green) !important;
 }
 
-.mc-translate-to-hebrew-btn.error {
+.mc-translate-to-hebrew-btn.error,
+.mc-translate-google-btn.error {
   border-color: var(--mc-border-red) !important;
   color: var(--mc-text-red) !important;
   -webkit-text-fill-color: var(--mc-text-red) !important;
@@ -531,6 +539,7 @@
   .mc-outgoing-toolbar button,
   .mc-auto-translate-toggle,
   .mc-translate-to-hebrew-btn,
+  .mc-translate-google-btn,
   .mc-conversation-summary-btn {
     color: var(--mc-text) !important;
     -webkit-text-fill-color: var(--mc-text) !important;
@@ -540,6 +549,7 @@
 
   .mc-auto-translate-toggle:hover:not(:disabled),
   .mc-translate-to-hebrew-btn:hover:not(:disabled),
+  .mc-translate-google-btn:hover:not(:disabled),
   .mc-conversation-summary-btn:hover:not(:disabled) {
     color: var(--mc-text-blue) !important;
     -webkit-text-fill-color: var(--mc-text-blue) !important;
@@ -548,6 +558,7 @@
 
   .mc-auto-translate-toggle.active,
   .mc-translate-to-hebrew-btn.success,
+  .mc-translate-google-btn.success,
   .mc-conversation-summary-btn.success {
     color: var(--mc-text-green) !important;
     -webkit-text-fill-color: var(--mc-text-green) !important;
@@ -555,12 +566,14 @@
   }
 
   .mc-translate-to-hebrew-btn.loading,
+  .mc-translate-google-btn.loading,
   .mc-conversation-summary-btn.loading {
     color: var(--mc-text-blue) !important;
     -webkit-text-fill-color: var(--mc-text-blue) !important;
   }
 
   .mc-translate-to-hebrew-btn.error,
+  .mc-translate-google-btn.error,
   .mc-conversation-summary-btn.error,
   .mc-ai-translation.error,
   .mc-ai-gemini-result.error {

@@ -16,6 +16,17 @@ export function languageLabel(code: string): string {
   return LANGUAGE_LABELS[key] ?? key.toUpperCase();
 }
 
+/** Outgoing composer — Google Translate (plain). */
+export function languageButtonLabel(targetLanguage: string): string {
+  return languageLabel(targetLanguage);
+}
+
+/** Outgoing composer — Gemini. */
+export function languageAiButtonLabel(targetLanguage: string): string {
+  return `${languageLabel(targetLanguage)} AI`;
+}
+
+/** @deprecated Use languageAiButtonLabel */
 export function translateToButtonLabel(targetLanguage: string): string {
-  return `Translate to ${languageLabel(targetLanguage)}`;
+  return languageAiButtonLabel(targetLanguage);
 }

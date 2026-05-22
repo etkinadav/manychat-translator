@@ -10,6 +10,8 @@ export interface TranslateRequest {
    * Languages are resolved on the server from the authenticated profile.
    */
   outgoing?: boolean;
+  /** Outgoing composer via Google Translate only (no Gemini). */
+  outgoingGoogle?: boolean;
   /** Per-message incoming customer text → Gemini (extension AI button). */
   incomingGemini?: boolean;
   /** Customer gender for Gemini prompts (extension UI). Default: male. */

@@ -25,6 +25,7 @@ interface BgTranslateMessage {
   type: "translate";
   texts: string[];
   outgoing?: boolean;
+  outgoingGoogle?: boolean;
   incomingGemini?: boolean;
   customerGender?: "male" | "female";
 }
@@ -178,12 +179,14 @@ async function handleTranslate(
       headers,
       body: JSON.stringify({
         texts: message.texts,
-        ...(message.outgoing
-          ? {
-              outgoing: true,
-              customerGender: message.customerGender ?? "male",
-            }
-          : message.incomingGemini
+        ...(message.outgoingGoogle
+          ? { outgoingGoogle: true }
+          : message.outgoing
+            ? {
+                outgoing: true,
+                customerGender: message.customerGender ?? "male",
+              }
+            : message.incomingGemini
             ? {
                 incomingGemini: true,
                 customerGender: message.customerGender ?? "male",

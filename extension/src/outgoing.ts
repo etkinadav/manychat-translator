@@ -7,7 +7,10 @@ import {
   readAutoTranslateEnabled,
   writeAutoTranslateEnabled,
 } from "./auto-translate";
-import { translateToButtonLabel } from "./constants/languages";
+import {
+  languageAiButtonLabel,
+  languageButtonLabel,
+} from "./constants/languages";
 import {
   CUSTOMER_GENDER_INPUT_NAME,
   readCustomerGender,
@@ -36,8 +39,11 @@ const TOOLBAR_MODE_ATTR = "data-mc-toolbar-mode";
 const TOOLBAR_MODE_COMPOSER = "composer";
 const TOOLBAR_MODE_READONLY = "readonly";
 const BUTTON_ATTR = "data-mc-translate-outgoing";
+const GOOGLE_BUTTON_ATTR = "data-mc-translate-outgoing-google";
 const GENDER_ATTR = CUSTOMER_GENDER_INPUT_NAME;
 const BUTTON_CLASS = "mc-translate-to-hebrew-btn";
+const GOOGLE_BUTTON_CLASS = "mc-translate-google-btn";
+const OUTGOING_TRANSLATE_BTN_SELECTOR = `${BUTTON_CLASS}, ${GOOGLE_BUTTON_CLASS}`;
 const SUMMARY_BTN_CLASS = "mc-conversation-summary-btn";
 const SUMMARY_BTN_ATTR = "data-mc-summary-toolbar-btn";
 const AUTO_TRANSLATE_BTN_CLASS = "mc-auto-translate-toggle";
@@ -59,7 +65,8 @@ const ERROR_RESET_MS = 6000;
 const SUCCESS_RESET_MS = 6000;
 
 let cachedSession: ExtensionSession | null = null;
-let defaultButtonLabel = LABEL_SIGN_IN;
+let defaultAiButtonLabel = LABEL_SIGN_IN;
+let defaultGoogleButtonLabel = LABEL_SIGN_IN;
 
 interface CsTranslateReply {
   ok: boolean;
@@ -77,17 +84,43 @@ async function ensureSession(): Promise<ExtensionSession | null> {
   try {
     cachedSession = await fetchSession(false);
     if (cachedSession.organization) {
-      defaultButtonLabel = translateToButtonLabel(
-        cachedSession.organization.language,
-      );
+      const lang = cachedSession.organization.language;
+      defaultAiButtonLabel = languageAiButtonLabel(lang);
+      defaultGoogleButtonLabel = languageButtonLabel(lang);
     } else {
-      defaultButtonLabel = "Connect organization (web app)";
+      defaultAiButtonLabel = "Connect organization (web app)";
+      defaultGoogleButtonLabel = defaultAiButtonLabel;
     }
     return cachedSession;
   } catch {
     cachedSession = null;
-    defaultButtonLabel = LABEL_SIGN_IN;
+    defaultAiButtonLabel = LABEL_SIGN_IN;
+    defaultGoogleButtonLabel = LABEL_SIGN_IN;
     return null;
+  }
+}
+
+function getTranslateButtonDefaultLabel(btn: HTMLButtonElement): string {
+  const stored = btn.dataset.mcDefaultLabel;
+  if (stored) return stored;
+  return btn.classList.contains(GOOGLE_BUTTON_CLASS)
+    ? defaultGoogleButtonLabel
+    : defaultAiButtonLabel;
+}
+
+function applyOutgoingTranslateButtonLabels(lang: string): void {
+  defaultAiButtonLabel = languageAiButtonLabel(lang);
+  defaultGoogleButtonLabel = languageButtonLabel(lang);
+  for (const btn of document.querySelectorAll<HTMLButtonElement>(
+    `.${OUTGOING_TRANSLATE_BTN_SELECTOR}`,
+  )) {
+    const label = btn.classList.contains(GOOGLE_BUTTON_CLASS)
+      ? defaultGoogleButtonLabel
+      : defaultAiButtonLabel;
+    btn.dataset.mcDefaultLabel = label;
+    if (!shouldPreserveTranslateButtonLabel(btn)) {
+      btn.textContent = label;
+    }
   }
 }
 
@@ -230,18 +263,20 @@ function isTranslateButtonBusy(btn: HTMLButtonElement): boolean {
 function syncToolbarSession(toolbar: HTMLElement): void {
   void ensureSession().then((session) => {
     const hasOrg = Boolean(session?.organization);
-    const translateBtn = toolbar.querySelector<HTMLButtonElement>(
-      `.${BUTTON_CLASS}`,
-    );
+    if (session?.organization) {
+      applyOutgoingTranslateButtonLabels(session.organization.language);
+    }
     const summaryBtn = toolbar.querySelector<HTMLButtonElement>(
       `.${SUMMARY_BTN_CLASS}`,
     );
     const autoBtn = toolbar.querySelector<HTMLButtonElement>(
       `.${AUTO_TRANSLATE_BTN_CLASS}`,
     );
-    if (translateBtn) {
+    for (const translateBtn of toolbar.querySelectorAll<HTMLButtonElement>(
+      `.${OUTGOING_TRANSLATE_BTN_SELECTOR}`,
+    )) {
       if (!shouldPreserveTranslateButtonLabel(translateBtn)) {
-        translateBtn.textContent = defaultButtonLabel;
+        translateBtn.textContent = getTranslateButtonDefaultLabel(translateBtn);
       }
       translateBtn.disabled =
         isTranslateButtonBusy(translateBtn) || !hasOrg;
@@ -260,6 +295,7 @@ function ensureToolbarButtons(
 ): void {
   if (!includeTranslate || !isFeatureEnabled("outgoingTranslate")) {
     toolbar.querySelector(`.${BUTTON_CLASS}`)?.remove();
+    toolbar.querySelector(`.${GOOGLE_BUTTON_CLASS}`)?.remove();
   }
 
   if (
@@ -271,18 +307,28 @@ function ensureToolbarButtons(
     toolbar.querySelector(`.${AUTO_TRANSLATE_BTN_CLASS}`)?.remove();
   }
 
-  if (
-    includeTranslate &&
-    isFeatureEnabled("outgoingTranslate") &&
-    !toolbar.querySelector(`.${BUTTON_CLASS}`)
-  ) {
-    const btn = createTranslateButton();
-    btn.addEventListener("click", () => {
-      void onTranslateClick(btn);
-    });
+  if (includeTranslate && isFeatureEnabled("outgoingTranslate")) {
     const autoBtn = toolbar.querySelector(`.${AUTO_TRANSLATE_BTN_CLASS}`);
-    if (autoBtn) autoBtn.insertAdjacentElement("afterend", btn);
-    else toolbar.append(btn);
+    let insertAfter: Element | null = autoBtn;
+
+    if (!toolbar.querySelector(`.${BUTTON_CLASS}`)) {
+      const aiBtn = createAiTranslateButton();
+      aiBtn.addEventListener("click", () => {
+        void onAiTranslateClick(aiBtn);
+      });
+      if (insertAfter) insertAfter.insertAdjacentElement("afterend", aiBtn);
+      else toolbar.append(aiBtn);
+      insertAfter = aiBtn;
+    }
+
+    if (!toolbar.querySelector(`.${GOOGLE_BUTTON_CLASS}`)) {
+      const googleBtn = createGoogleTranslateButton();
+      googleBtn.addEventListener("click", () => {
+        void onGoogleTranslateClick(googleBtn);
+      });
+      if (insertAfter) insertAfter.insertAdjacentElement("afterend", googleBtn);
+      else toolbar.append(googleBtn);
+    }
   }
 
   if (
@@ -441,12 +487,25 @@ async function onConversationSummaryClick(btn: HTMLButtonElement): Promise<void>
   }
 }
 
-function createTranslateButton(): HTMLButtonElement {
+function createAiTranslateButton(): HTMLButtonElement {
   const btn = document.createElement("button");
   btn.type = "button";
   btn.className = BUTTON_CLASS;
   btn.setAttribute(BUTTON_ATTR, "true");
-  btn.textContent = defaultButtonLabel;
+  btn.dataset.mcDefaultLabel = defaultAiButtonLabel;
+  btn.textContent = defaultAiButtonLabel;
+  btn.title = "Translate with Gemini (context-aware)";
+  return btn;
+}
+
+function createGoogleTranslateButton(): HTMLButtonElement {
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = GOOGLE_BUTTON_CLASS;
+  btn.setAttribute(GOOGLE_BUTTON_ATTR, "true");
+  btn.dataset.mcDefaultLabel = defaultGoogleButtonLabel;
+  btn.textContent = defaultGoogleButtonLabel;
+  btn.title = "Translate with Google Translate";
   return btn;
 }
 
@@ -504,11 +563,17 @@ function createOutgoingToolbar(includeTranslate: boolean): HTMLDivElement {
   }
 
   if (includeTranslate && isFeatureEnabled("outgoingTranslate")) {
-    const btn = createTranslateButton();
-    btn.addEventListener("click", () => {
-      void onTranslateClick(btn);
+    const aiBtn = createAiTranslateButton();
+    aiBtn.addEventListener("click", () => {
+      void onAiTranslateClick(aiBtn);
     });
-    children.push(btn);
+    children.push(aiBtn);
+
+    const googleBtn = createGoogleTranslateButton();
+    googleBtn.addEventListener("click", () => {
+      void onGoogleTranslateClick(googleBtn);
+    });
+    children.push(googleBtn);
   }
 
   if (isFeatureEnabled("conversationSummary")) {
@@ -522,11 +587,12 @@ function createOutgoingToolbar(includeTranslate: boolean): HTMLDivElement {
     const hasOrg = Boolean(session?.organization);
     if (summaryBtn) summaryBtn.disabled = !hasOrg;
     if (autoBtn) autoBtn.disabled = false;
-    const translateBtn = toolbar.querySelector<HTMLButtonElement>(
-      `.${BUTTON_CLASS}`,
-    );
-    if (translateBtn && !isTranslateButtonBusy(translateBtn)) {
-      translateBtn.disabled = !hasOrg;
+    for (const translateBtn of toolbar.querySelectorAll<HTMLButtonElement>(
+      `.${OUTGOING_TRANSLATE_BTN_SELECTOR}`,
+    )) {
+      if (!isTranslateButtonBusy(translateBtn)) {
+        translateBtn.disabled = !hasOrg;
+      }
     }
   });
 
@@ -554,7 +620,7 @@ function setButtonState(
       btn.textContent = LABEL_ERROR;
       break;
     default:
-      btn.textContent = defaultButtonLabel;
+      btn.textContent = getTranslateButtonDefaultLabel(btn);
   }
 }
 
@@ -944,6 +1010,38 @@ interface OutgoingTranslateResult {
   dryRun?: boolean;
 }
 
+function postTranslateOutgoingGoogle(userText: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const timeout = window.setTimeout(
+      () => reject(new Error("backend request timed out")),
+      REQUEST_TIMEOUT_MS,
+    );
+    chrome.runtime.sendMessage(
+      {
+        type: "translate",
+        texts: [userText],
+        outgoingGoogle: true,
+      },
+      (response: CsTranslateReply | undefined) => {
+        window.clearTimeout(timeout);
+        if (chrome.runtime.lastError) {
+          reject(new Error(chrome.runtime.lastError.message));
+          return;
+        }
+        if (!response?.ok) {
+          reject(new Error(response?.error ?? "backend request failed"));
+          return;
+        }
+        if (!response.translations?.[0]) {
+          reject(new Error("backend request failed"));
+          return;
+        }
+        resolve(response.translations[0]);
+      },
+    );
+  });
+}
+
 function postTranslateOutgoing(
   userText: string,
   customerGender: CustomerGender,
@@ -991,7 +1089,65 @@ function postTranslateOutgoing(
   });
 }
 
-async function onTranslateClick(btn: HTMLButtonElement): Promise<void> {
+async function runOutgoingTranslate(
+  btn: HTMLButtonElement,
+  translated: string,
+): Promise<void> {
+  const composer = findComposerField();
+  if (!composer) {
+    warn("composer not found after translate");
+    return;
+  }
+  const liveComposer = findComposerField() ?? composer;
+  await setComposerValue(liveComposer, translated);
+  focusComposerEnd(liveComposer);
+  setButtonState(btn, "success");
+  scheduleButtonReset(btn, "default", SUCCESS_RESET_MS);
+}
+
+async function onGoogleTranslateClick(btn: HTMLButtonElement): Promise<void> {
+  const session = await ensureSession();
+  if (!session?.organization) {
+    setButtonState(btn, "error");
+    scheduleButtonReset(btn, "default", ERROR_RESET_MS);
+    return;
+  }
+
+  const composer = findComposerField();
+  if (!composer) {
+    warn("composer not found on click");
+    return;
+  }
+
+  const userText = getComposerText(composer);
+  if (!userText) return;
+
+  outgoingTranslateInProgress = true;
+  setButtonState(btn, "loading");
+  log("outgoing translate requested (Google path)", {
+    chars: userText.length,
+    userLanguage: session.language,
+    orgLanguage: session.organization.language,
+  });
+
+  try {
+    const translation = (await postTranslateOutgoingGoogle(userText)).trim();
+    if (!translation) {
+      setButtonState(btn, "error");
+      scheduleButtonReset(btn, "default", ERROR_RESET_MS);
+      return;
+    }
+    await runOutgoingTranslate(btn, translation);
+  } catch (err) {
+    warn("outgoing Google translation failed:", err);
+    setButtonState(btn, "error");
+    scheduleButtonReset(btn, "default", ERROR_RESET_MS);
+  } finally {
+    outgoingTranslateInProgress = false;
+  }
+}
+
+async function onAiTranslateClick(btn: HTMLButtonElement): Promise<void> {
   const session = await ensureSession();
   if (!session?.organization) {
     setButtonState(btn, "error");
@@ -1047,13 +1203,9 @@ async function onTranslateClick(btn: HTMLButtonElement): Promise<void> {
       return;
     }
 
-    const liveComposer = findComposerField() ?? composer;
-    await setComposerValue(liveComposer, translated);
-    focusComposerEnd(liveComposer);
-    setButtonState(btn, "success");
-    scheduleButtonReset(btn, "default", SUCCESS_RESET_MS);
+    await runOutgoingTranslate(btn, translated);
   } catch (err) {
-    warn("outgoing translation failed:", err);
+    warn("outgoing Gemini translation failed:", err);
     setButtonState(btn, "error");
     scheduleButtonReset(btn, "default", ERROR_RESET_MS);
   } finally {
@@ -1124,7 +1276,7 @@ function isRelevantOutgoingMutation(mutation: MutationRecord): boolean {
   const target = mutation.target as Element | null;
   if (
     target?.closest?.(
-      `.${BUTTON_CLASS}, .${SUMMARY_BTN_CLASS}, .${AUTO_TRANSLATE_BTN_CLASS}, .mc-outgoing-toolbar`,
+      `.${OUTGOING_TRANSLATE_BTN_SELECTOR}, .${SUMMARY_BTN_CLASS}, .${AUTO_TRANSLATE_BTN_CLASS}, .mc-outgoing-toolbar`,
     )
   ) {
     return false;
@@ -1134,10 +1286,10 @@ function isRelevantOutgoingMutation(mutation: MutationRecord): boolean {
       if (!(node instanceof Element)) continue;
       if (
         node.matches?.(
-          `.${BUTTON_CLASS}, .${SUMMARY_BTN_CLASS}, .${AUTO_TRANSLATE_BTN_CLASS}, .mc-outgoing-toolbar`,
+          `.${OUTGOING_TRANSLATE_BTN_SELECTOR}, .${SUMMARY_BTN_CLASS}, .${AUTO_TRANSLATE_BTN_CLASS}, .mc-outgoing-toolbar`,
         ) ||
         node.querySelector?.(
-          `.${BUTTON_CLASS}, .${SUMMARY_BTN_CLASS}, .${AUTO_TRANSLATE_BTN_CLASS}, .mc-outgoing-toolbar`,
+          `.${OUTGOING_TRANSLATE_BTN_SELECTOR}, .${SUMMARY_BTN_CLASS}, .${AUTO_TRANSLATE_BTN_CLASS}, .mc-outgoing-toolbar`,
         )
       ) {
         continue;

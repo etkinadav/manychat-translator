@@ -19,6 +19,7 @@ import {
 } from "../services/geminiOutgoingTranslate.service";
 import { summarizeConversation } from "../services/geminiConversationSummary.service";
 import { detectSubscriberNameGender } from "../services/geminiNameGender.service";
+import { cleanOutgoingTranslation } from "../services/outgoingPromptCleanup.service";
 import { organizationDisplayName } from "./organization.helpers";
 import { resolveLanguagePairFromProfile } from "../services/translateLanguagePair";
 import { resolveTranslateOrganizationContext } from "./translateOrganizationContext";
@@ -137,7 +138,7 @@ export async function translateBatch(
     if (!ctx) return;
     const { user, org } = ctx;
 
-    if (body?.outgoing === true) {
+    if (body?.outgoingGoogle === true || body?.outgoing === true) {
       if (texts.length !== 1) {
         res.status(400).json({
           error: "Outgoing translation supports exactly one message at a time.",
@@ -148,6 +149,28 @@ export async function translateBatch(
       const messageText = texts[0] ?? "";
       if (!messageText.trim()) {
         res.status(400).json({ error: "Message text is empty." });
+        return;
+      }
+
+      if (body.outgoingGoogle === true) {
+        const { source: sourceLanguage, target: targetLanguage } =
+          resolveLanguagePairFromProfile({
+            userLanguage: user.language || "en",
+            orgLanguage: org.language,
+            outgoing: true,
+          });
+
+        console.log(
+          `[translate] outgoing-google | user=${String(user._id)} org=${String(org._id)} | ${sourceLanguage} -> ${targetLanguage} | chars=${messageText.length}`,
+        );
+
+        const raw = await translateTexts(
+          [messageText],
+          targetLanguage,
+          sourceLanguage,
+        );
+        const translated = cleanOutgoingTranslation(raw[0] ?? messageText);
+        res.status(200).json({ translations: [translated] });
         return;
       }
 
