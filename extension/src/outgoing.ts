@@ -70,6 +70,7 @@ interface CsTranslateReply {
 
 let rescanTimer: number | null = null;
 let outgoingObserver: MutationObserver | null = null;
+let composerWriteInProgress = false;
 
 async function ensureSession(): Promise<ExtensionSession | null> {
   try {
@@ -606,13 +607,60 @@ function normalizeComposerText(text: string): string {
   return text.replace(/\s+/g, " ").trim();
 }
 
-function contentEditableShowsText(el: HTMLElement, expected: string): boolean {
-  const got = normalizeComposerText(el.textContent ?? "");
-  const want = normalizeComposerText(expected);
-  return got === want || (want.length > 0 && got.includes(want));
+function contentEditableMatches(el: HTMLElement, expected: string): boolean {
+  return (
+    normalizeComposerText(el.textContent ?? "") ===
+    normalizeComposerText(expected)
+  );
+}
+
+function isLexicalComposer(el: HTMLElement): boolean {
+  return (
+    el.hasAttribute("data-lexical-editor") ||
+    el.closest("[data-lexical-editor]") !== null
+  );
+}
+
+function getLexicalComposerRoot(el: HTMLElement): HTMLElement {
+  if (el.hasAttribute("data-lexical-editor")) return el;
+  return el.closest<HTMLElement>("[data-lexical-editor]") ?? el;
+}
+
+/** Select the actual Lexical text node — selectNodeContents on the root often misses it. */
+function selectLexicalComposerText(el: HTMLElement): void {
+  const root = getLexicalComposerRoot(el);
+  root.focus();
+  const selection = window.getSelection();
+  if (!selection) return;
+
+  const range = document.createRange();
+  const textSpan = root.querySelector("span[data-lexical-text=\"true\"]");
+  const textNode = textSpan?.firstChild;
+
+  if (textNode?.nodeType === Node.TEXT_NODE) {
+    const len = textNode.textContent?.length ?? 0;
+    range.setStart(textNode, 0);
+    range.setEnd(textNode, len);
+  } else if (textSpan) {
+    range.selectNodeContents(textSpan);
+  } else {
+    const paragraph = root.querySelector("p");
+    if (paragraph) {
+      range.selectNodeContents(paragraph);
+    } else {
+      range.selectNodeContents(root);
+    }
+  }
+
+  selection.removeAllRanges();
+  selection.addRange(range);
 }
 
 function selectAllInContentEditable(el: HTMLElement): void {
+  if (isLexicalComposer(el)) {
+    selectLexicalComposerText(el);
+    return;
+  }
   el.focus();
   if (typeof document.execCommand === "function") {
     document.execCommand("selectAll", false);
@@ -623,6 +671,121 @@ function selectAllInContentEditable(el: HTMLElement): void {
   range.selectNodeContents(el);
   selection.removeAllRanges();
   selection.addRange(range);
+}
+
+type LexicalEditorLike = {
+  update: (fn: () => void) => void;
+  parseEditorState?: (json: string) => unknown;
+  setEditorState?: (state: unknown) => void;
+};
+
+function isLexicalEditorLike(value: unknown): value is LexicalEditorLike {
+  return (
+    !!value &&
+    typeof value === "object" &&
+    typeof (value as LexicalEditorLike).update === "function"
+  );
+}
+
+function walkFiberForLexicalEditor(start: unknown): LexicalEditorLike | null {
+  const seen = new Set<unknown>();
+  const queue: unknown[] = [start];
+
+  while (queue.length > 0) {
+    const node = queue.shift();
+    if (!node || typeof node !== "object" || seen.has(node)) continue;
+    seen.add(node);
+
+    const fiber = node as {
+      memoizedProps?: Record<string, unknown>;
+      stateNode?: unknown;
+      return?: unknown;
+      child?: unknown;
+      sibling?: unknown;
+    };
+
+    for (const key of ["editor", "lexicalEditor"]) {
+      const candidate = fiber.memoizedProps?.[key];
+      if (isLexicalEditorLike(candidate)) return candidate;
+    }
+    if (isLexicalEditorLike(fiber.stateNode)) {
+      return fiber.stateNode;
+    }
+
+    if (fiber.return) queue.push(fiber.return);
+    if (fiber.child) queue.push(fiber.child);
+    if (fiber.sibling) queue.push(fiber.sibling);
+  }
+
+  return null;
+}
+
+function findLexicalEditor(el: HTMLElement): LexicalEditorLike | null {
+  const root = getLexicalComposerRoot(el);
+  const bag = root as HTMLElement & Record<string, unknown>;
+
+  for (const value of Object.values(bag)) {
+    if (isLexicalEditorLike(value)) return value;
+  }
+
+  const fiberKey = Object.keys(bag).find(
+    (k) =>
+      k.startsWith("__reactFiber$") || k.startsWith("__reactInternalInstance$"),
+  );
+  if (!fiberKey) return null;
+  return walkFiberForLexicalEditor(bag[fiberKey]);
+}
+
+function buildPlainTextLexicalState(text: string): object {
+  return {
+    root: {
+      children: [
+        {
+          children: [
+            {
+              detail: 0,
+              format: 0,
+              mode: "normal",
+              style: "",
+              text,
+              type: "text",
+              version: 1,
+            },
+          ],
+          direction: "ltr",
+          format: "",
+          indent: 0,
+          type: "paragraph",
+          version: 1,
+        },
+      ],
+      direction: "ltr",
+      format: "",
+      indent: 0,
+      type: "root",
+      version: 1,
+    },
+  };
+}
+
+function tryLexicalEditorStateReplace(
+  el: HTMLElement,
+  value: string,
+): boolean {
+  const editor = findLexicalEditor(el);
+  if (
+    !editor?.parseEditorState ||
+    typeof editor.setEditorState !== "function"
+  ) {
+    return false;
+  }
+  try {
+    const json = JSON.stringify(buildPlainTextLexicalState(value));
+    editor.setEditorState(editor.parseEditorState(json));
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function dispatchSyntheticPaste(el: HTMLElement, text: string): boolean {
@@ -648,6 +811,7 @@ function dispatchSyntheticPaste(el: HTMLElement, text: string): boolean {
   }
 }
 
+/** Lexical (WhatsApp) applies text on beforeinput; a follow-up input duplicates it. */
 function dispatchInsertReplacementText(el: HTMLElement, text: string): void {
   const before = new InputEvent("beforeinput", {
     bubbles: true,
@@ -656,38 +820,6 @@ function dispatchInsertReplacementText(el: HTMLElement, text: string): void {
     data: text,
   });
   el.dispatchEvent(before);
-  if (before.defaultPrevented) {
-    el.dispatchEvent(
-      new InputEvent("input", {
-        bubbles: true,
-        inputType: "insertReplacementText",
-        data: text,
-      }),
-    );
-  }
-}
-
-function execDeleteAndInsertText(el: HTMLElement, text: string): void {
-  if (typeof document.execCommand !== "function") return;
-  selectAllInContentEditable(el);
-  document.execCommand("delete", false);
-  document.execCommand("insertText", false, text);
-}
-
-function setContentEditableDomFallback(el: HTMLElement, value: string): void {
-  const block =
-    el.querySelector<HTMLElement>('span[data-lexical-text="true"]') ??
-    el.querySelector("p") ??
-    el;
-  block.textContent = value;
-  el.dispatchEvent(
-    new InputEvent("input", {
-      bubbles: true,
-      cancelable: true,
-      inputType: "insertText",
-      data: value,
-    }),
-  );
 }
 
 function waitForComposerPaint(): Promise<void> {
@@ -696,38 +828,54 @@ function waitForComposerPaint(): Promise<void> {
   });
 }
 
-/** WhatsApp Web (Lexical) ignores plain DOM writes; drive editor via input/paste commands. */
+/** WhatsApp Web — Lexical composer; never chain strategies (partial inserts corrupt text). */
+async function setLexicalComposerValue(
+  el: HTMLElement,
+  value: string,
+): Promise<void> {
+  const root = getLexicalComposerRoot(el);
+
+  if (tryLexicalEditorStateReplace(root, value)) {
+    await waitForComposerPaint();
+    if (contentEditableMatches(root, value)) return;
+  }
+
+  selectLexicalComposerText(root);
+  dispatchInsertReplacementText(root, value);
+  await waitForComposerPaint();
+  if (contentEditableMatches(root, value)) return;
+
+  selectLexicalComposerText(root);
+  dispatchSyntheticPaste(root, value);
+  await waitForComposerPaint();
+  if (contentEditableMatches(root, value)) return;
+
+  warn("Lexical composer write failed", {
+    expectedChars: value.length,
+    got: normalizeComposerText(root.textContent ?? ""),
+  });
+}
+
 async function setContentEditableValue(
   el: HTMLElement,
   value: string,
 ): Promise<void> {
-  const strategies: Array<() => void> = [
-    () => {
-      selectAllInContentEditable(el);
-      dispatchInsertReplacementText(el, value);
-    },
-    () => {
-      selectAllInContentEditable(el);
-      dispatchSyntheticPaste(el, value);
-    },
-    () => execDeleteAndInsertText(el, value),
-    () => {
-      selectAllInContentEditable(el);
-      if (typeof document.execCommand === "function") {
-        document.execCommand("insertText", false, value);
-      }
-    },
-    () => setContentEditableDomFallback(el, value),
-  ];
-
-  for (const run of strategies) {
-    run();
-    if (contentEditableShowsText(el, value)) return;
-    await waitForComposerPaint();
-    if (contentEditableShowsText(el, value)) return;
+  if (isLexicalComposer(el)) {
+    await setLexicalComposerValue(el, value);
+    return;
   }
 
-  warn("contenteditable write did not stick (Lexical composer?)", {
+  selectAllInContentEditable(el);
+  dispatchInsertReplacementText(el, value);
+  await waitForComposerPaint();
+  if (contentEditableMatches(el, value)) return;
+
+  selectAllInContentEditable(el);
+  dispatchSyntheticPaste(el, value);
+  await waitForComposerPaint();
+  if (contentEditableMatches(el, value)) return;
+
+  warn("contenteditable write did not stick", {
     expectedChars: value.length,
     got: normalizeComposerText(el.textContent ?? ""),
   });
@@ -878,8 +1026,13 @@ async function onTranslateClick(btn: HTMLButtonElement): Promise<void> {
     }
 
     const liveComposer = findComposerField() ?? composer;
-    await setComposerValue(liveComposer, translated);
-    focusComposerEnd(liveComposer);
+    composerWriteInProgress = true;
+    try {
+      await setComposerValue(liveComposer, translated);
+      focusComposerEnd(liveComposer);
+    } finally {
+      composerWriteInProgress = false;
+    }
     setButtonState(btn, "success");
     scheduleButtonReset(btn, "default", SUCCESS_RESET_MS);
   } catch (err) {
@@ -978,6 +1131,7 @@ function isRelevantOutgoingMutation(mutation: MutationRecord): boolean {
 }
 
 function scheduleOutgoingRescan(reason: string): void {
+  if (composerWriteInProgress) return;
   if (rescanTimer !== null) window.clearTimeout(rescanTimer);
   rescanTimer = window.setTimeout(() => {
     rescanTimer = null;
@@ -1016,7 +1170,7 @@ export function initOutgoing(): void {
   });
 
   window.setInterval(() => {
-    ensureOutgoingToolbars();
+    if (!composerWriteInProgress) ensureOutgoingToolbars();
   }, TOOLBAR_KEEPALIVE_MS);
 
   for (const delay of POST_NAVIGATION_DELAYS_MS) {
