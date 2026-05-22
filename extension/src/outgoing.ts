@@ -54,8 +54,8 @@ const LABEL_SIGN_IN = "Sign in (extension popup)";
 const OUTGOING_RESCAN_DEBOUNCE_MS = 150;
 const POST_NAVIGATION_DELAYS_MS = [200, 600, 1500];
 const REQUEST_TIMEOUT_MS = 15000;
-const ERROR_RESET_MS = 2000;
-const SUCCESS_RESET_MS = 2000;
+const ERROR_RESET_MS = 6000;
+const SUCCESS_RESET_MS = 6000;
 
 let cachedSession: ExtensionSession | null = null;
 let defaultButtonLabel = LABEL_SIGN_IN;
@@ -70,7 +70,7 @@ interface CsTranslateReply {
 
 let rescanTimer: number | null = null;
 let outgoingObserver: MutationObserver | null = null;
-let composerWriteInProgress = false;
+let outgoingTranslateInProgress = false;
 
 async function ensureSession(): Promise<ExtensionSession | null> {
   try {
@@ -211,6 +211,21 @@ function attachGenderToToolbar(toolbar: HTMLElement): void {
   });
 }
 
+function shouldPreserveTranslateButtonLabel(btn: HTMLButtonElement): boolean {
+  return (
+    outgoingTranslateInProgress ||
+    btn.classList.contains("loading") ||
+    btn.classList.contains("success") ||
+    btn.classList.contains("error")
+  );
+}
+
+function isTranslateButtonBusy(btn: HTMLButtonElement): boolean {
+  return (
+    outgoingTranslateInProgress || btn.classList.contains("loading")
+  );
+}
+
 function syncToolbarSession(toolbar: HTMLElement): void {
   void ensureSession().then((session) => {
     const hasOrg = Boolean(session?.organization);
@@ -224,8 +239,11 @@ function syncToolbarSession(toolbar: HTMLElement): void {
       `.${AUTO_TRANSLATE_BTN_CLASS}`,
     );
     if (translateBtn) {
-      translateBtn.textContent = defaultButtonLabel;
-      translateBtn.disabled = !hasOrg;
+      if (!shouldPreserveTranslateButtonLabel(translateBtn)) {
+        translateBtn.textContent = defaultButtonLabel;
+      }
+      translateBtn.disabled =
+        isTranslateButtonBusy(translateBtn) || !hasOrg;
     }
     if (summaryBtn) summaryBtn.disabled = !hasOrg;
     if (autoBtn) {
@@ -506,7 +524,9 @@ function createOutgoingToolbar(includeTranslate: boolean): HTMLDivElement {
     const translateBtn = toolbar.querySelector<HTMLButtonElement>(
       `.${BUTTON_CLASS}`,
     );
-    if (translateBtn) translateBtn.disabled = !hasOrg;
+    if (translateBtn && !isTranslateButtonBusy(translateBtn)) {
+      translateBtn.disabled = !hasOrg;
+    }
   });
 
   return toolbar;
@@ -992,6 +1012,7 @@ async function onTranslateClick(btn: HTMLButtonElement): Promise<void> {
     ? readCustomerGenderFromToolbar(toolbar)
     : await readCustomerGender();
 
+  outgoingTranslateInProgress = true;
   setButtonState(btn, "loading");
   log("outgoing translate requested (Gemini path)", {
     chars: userText.length,
@@ -1026,19 +1047,16 @@ async function onTranslateClick(btn: HTMLButtonElement): Promise<void> {
     }
 
     const liveComposer = findComposerField() ?? composer;
-    composerWriteInProgress = true;
-    try {
-      await setComposerValue(liveComposer, translated);
-      focusComposerEnd(liveComposer);
-    } finally {
-      composerWriteInProgress = false;
-    }
+    await setComposerValue(liveComposer, translated);
+    focusComposerEnd(liveComposer);
     setButtonState(btn, "success");
     scheduleButtonReset(btn, "default", SUCCESS_RESET_MS);
   } catch (err) {
     warn("outgoing translation failed:", err);
     setButtonState(btn, "error");
     scheduleButtonReset(btn, "default", ERROR_RESET_MS);
+  } finally {
+    outgoingTranslateInProgress = false;
   }
 }
 
@@ -1131,7 +1149,7 @@ function isRelevantOutgoingMutation(mutation: MutationRecord): boolean {
 }
 
 function scheduleOutgoingRescan(reason: string): void {
-  if (composerWriteInProgress) return;
+  if (outgoingTranslateInProgress) return;
   if (rescanTimer !== null) window.clearTimeout(rescanTimer);
   rescanTimer = window.setTimeout(() => {
     rescanTimer = null;
@@ -1170,7 +1188,7 @@ export function initOutgoing(): void {
   });
 
   window.setInterval(() => {
-    if (!composerWriteInProgress) ensureOutgoingToolbars();
+    if (!outgoingTranslateInProgress) ensureOutgoingToolbars();
   }, TOOLBAR_KEEPALIVE_MS);
 
   for (const delay of POST_NAVIGATION_DELAYS_MS) {
