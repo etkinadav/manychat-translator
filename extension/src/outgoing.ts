@@ -23,6 +23,10 @@ import {
   showConversationSummary,
 } from "./chat-transcript";
 import { getDomProfile, isFeatureEnabled } from "./site-profile/context";
+import {
+  hideAgentPreviewSnackbar,
+  showAgentPreviewSnackbar,
+} from "./agent-preview-snackbar";
 import { fetchSession } from "./session-client";
 import type { ExtensionSession } from "./types";
 
@@ -1010,6 +1014,53 @@ interface OutgoingTranslateResult {
   dryRun?: boolean;
 }
 
+/** Plain Google batch translate (org → agent), no gender wrappers. */
+function postPlainGoogleTranslate(text: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const timeout = window.setTimeout(
+      () => reject(new Error("backend request timed out")),
+      REQUEST_TIMEOUT_MS,
+    );
+    chrome.runtime.sendMessage(
+      { type: "translate", texts: [text] },
+      (response: CsTranslateReply | undefined) => {
+        window.clearTimeout(timeout);
+        if (chrome.runtime.lastError) {
+          reject(new Error(chrome.runtime.lastError.message));
+          return;
+        }
+        if (!response?.ok) {
+          reject(new Error(response?.error ?? "backend request failed"));
+          return;
+        }
+        if (!response.translations?.[0]) {
+          reject(new Error("backend request failed"));
+          return;
+        }
+        resolve(response.translations[0]);
+      },
+    );
+  });
+}
+
+async function mirrorOrgTextToAgentPreview(orgLanguageText: string): Promise<void> {
+  const trimmed = orgLanguageText.trim();
+  if (!trimmed) return;
+
+  showAgentPreviewSnackbar("…");
+  try {
+    const agentText = (await postPlainGoogleTranslate(trimmed)).trim();
+    if (!agentText) {
+      hideAgentPreviewSnackbar();
+      return;
+    }
+    showAgentPreviewSnackbar(agentText);
+  } catch (err) {
+    warn("agent-language preview failed:", err);
+    hideAgentPreviewSnackbar();
+  }
+}
+
 function postTranslateOutgoingGoogle(
   userText: string,
   customerGender: CustomerGender,
@@ -1111,6 +1162,7 @@ async function runOutgoingTranslate(
   focusComposerEnd(liveComposer);
   setButtonState(btn, "success");
   scheduleButtonReset(btn, "default", SUCCESS_RESET_MS);
+  void mirrorOrgTextToAgentPreview(translated);
 }
 
 async function onGoogleTranslateClick(btn: HTMLButtonElement): Promise<void> {
