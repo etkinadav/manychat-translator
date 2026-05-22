@@ -9,6 +9,7 @@ import {
 } from "./auto-translate";
 import { translateToButtonLabel } from "./constants/languages";
 import {
+  CUSTOMER_GENDER_INPUT_NAME,
   readCustomerGender,
   writeCustomerGender,
   type CustomerGender,
@@ -35,7 +36,7 @@ const TOOLBAR_MODE_ATTR = "data-mc-toolbar-mode";
 const TOOLBAR_MODE_COMPOSER = "composer";
 const TOOLBAR_MODE_READONLY = "readonly";
 const BUTTON_ATTR = "data-mc-translate-outgoing";
-const GENDER_ATTR = "data-mc-customer-gender";
+const GENDER_ATTR = CUSTOMER_GENDER_INPUT_NAME;
 const BUTTON_CLASS = "mc-translate-to-hebrew-btn";
 const SUMMARY_BTN_CLASS = "mc-conversation-summary-btn";
 const SUMMARY_BTN_ATTR = "data-mc-summary-toolbar-btn";

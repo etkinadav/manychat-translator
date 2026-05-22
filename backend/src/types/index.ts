@@ -17,6 +17,8 @@ export interface TranslateRequest {
   /** Detect subscriber name gender via Gemini (Manychat header). */
   nameGender?: boolean;
   subscriberName?: string;
+  /** Agent UI language for transliterating the contact name (defaults to user profile). */
+  agentLanguage?: string;
   /** Summarize translated conversation via Gemini. */
   conversationSummary?: boolean;
   conversationTranscript?: string;
@@ -31,6 +33,8 @@ export type NameGenderCategory =
 export interface TranslateResponse {
   translations: string[];
   nameGender?: NameGenderCategory;
+  /** Contact name in the agent's language (name-gender flow). */
+  translatedName?: string;
   conversationSummary?: string;
   /** True when outgoing Gemini path logged the prompt but did not translate yet. */
   dryRun?: boolean;

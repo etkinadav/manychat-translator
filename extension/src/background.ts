@@ -47,6 +47,7 @@ interface BgLogoutMessage {
 interface BgDetectNameGenderMessage {
   type: "detectNameGender";
   subscriberName: string;
+  agentLanguage?: string;
 }
 
 interface BgConversationSummaryMessage {
@@ -282,8 +283,9 @@ async function handleTranslate(
 
 async function handleDetectNameGender(
   subscriberName: string,
+  agentLanguage: string,
 ): Promise<
-  | { ok: true; nameGender: string }
+  | { ok: true; nameGender: string; translatedName: string }
   | { ok: false; error: string }
 > {
   let headers: HeadersInit;
@@ -312,6 +314,7 @@ async function handleDetectNameGender(
       body: JSON.stringify({
         nameGender: true,
         subscriberName,
+        agentLanguage: agentLanguage || session.language || "en",
         texts: [subscriberName],
       }),
       signal: controller.signal,
@@ -319,6 +322,7 @@ async function handleDetectNameGender(
 
     const data = (await res.json()) as {
       nameGender?: string;
+      translatedName?: string;
       error?: string;
       message?: string;
     };
@@ -341,12 +345,16 @@ async function handleDetectNameGender(
     }
 
     const nameGender = data.nameGender?.trim();
+    const translatedName = data.translatedName?.trim() || subscriberName;
     if (!nameGender) {
       return { ok: false, error: "Invalid name-gender response" };
     }
 
-    console.log("[ManychatTranslator:bg] name-gender ok:", nameGender);
-    return { ok: true, nameGender };
+    console.log("[ManychatTranslator:bg] name-gender ok:", {
+      nameGender,
+      translatedName,
+    });
+    return { ok: true, nameGender, translatedName };
   } catch (err) {
     return {
       ok: false,
@@ -461,7 +469,10 @@ chrome.runtime.onMessage.addListener((message: BgMessage, _sender, sendResponse)
     return true;
   }
   if (message?.type === "detectNameGender" && message.subscriberName) {
-    void handleDetectNameGender(message.subscriberName).then(sendResponse);
+    void handleDetectNameGender(
+      message.subscriberName,
+      message.agentLanguage ?? "",
+    ).then(sendResponse);
     return true;
   }
   if (message?.type === "conversationSummary" && message.conversationTranscript) {

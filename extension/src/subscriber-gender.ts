@@ -1,7 +1,14 @@
 /**
- * Subscriber name gender — button next to Manychat contact title.
+ * Subscriber name gender — button next to contact title (Manychat / WhatsApp).
  */
 
+import {
+  applyCustomerGenderOnPage,
+  inferClearCustomerGenderFromCategory,
+  inferClearCustomerGenderFromText,
+  type CustomerGender,
+  type NameGenderCategory,
+} from "./customer-gender";
 import { getDomProfile } from "./site-profile/context";
 import { fetchSession } from "./session-client";
 
@@ -17,7 +24,7 @@ function subscriberTitleSelector(): string {
 }
 const INJECTED_ATTR = "data-mc-subscriber-gender";
 const BTN_CLASS = "mc-subscriber-gender-btn";
-const VALID_RESULTS = new Set([
+const VALID_RESULTS = new Set<NameGenderCategory>([
   "male",
   "female",
   "male or female",
@@ -27,12 +34,17 @@ const VALID_RESULTS = new Set([
 const processedTitles = new WeakSet<HTMLElement>();
 let observer: MutationObserver | null = null;
 
-type NameGenderCategory = "male" | "female" | "male or female" | "unknown";
-
 interface NameGenderReply {
   ok: boolean;
   nameGender?: NameGenderCategory;
+  translatedName?: string;
   error?: string;
+}
+
+interface NameGenderSuccess {
+  displayLabel: string;
+  nameGender: NameGenderCategory;
+  translatedName: string;
 }
 
 async function isOrganizationConnected(): Promise<boolean> {
@@ -44,26 +56,56 @@ async function isOrganizationConnected(): Promise<boolean> {
   }
 }
 
-function postDetectNameGender(name: string): Promise<NameGenderCategory> {
+function postDetectNameGender(name: string): Promise<NameGenderSuccess> {
   return new Promise((resolve, reject) => {
-    chrome.runtime.sendMessage(
-      {
-        type: "detectNameGender",
-        subscriberName: name,
-      },
-      (response: NameGenderReply | undefined) => {
-        if (chrome.runtime.lastError) {
-          reject(new Error(chrome.runtime.lastError.message));
-          return;
-        }
-        if (!response?.ok || !response.nameGender) {
-          reject(new Error(response?.error ?? "name gender request failed"));
-          return;
-        }
-        resolve(response.nameGender);
-      },
-    );
+    void (async () => {
+      const session = await fetchSession(false);
+      const agentLanguage = session.language || "en";
+
+      chrome.runtime.sendMessage(
+        {
+          type: "detectNameGender",
+          subscriberName: name,
+          agentLanguage,
+        },
+        (response: NameGenderReply | undefined) => {
+          if (chrome.runtime.lastError) {
+            reject(new Error(chrome.runtime.lastError.message));
+            return;
+          }
+          if (!response?.ok || !response.nameGender) {
+            reject(new Error(response?.error ?? "name gender request failed"));
+            return;
+          }
+
+          const nameGender = response.nameGender;
+          if (!VALID_RESULTS.has(nameGender)) {
+            reject(new Error("Invalid name-gender category"));
+            return;
+          }
+
+          const translatedName =
+            response.translatedName?.trim() || name.trim();
+          const displayLabel = `${translatedName} (${nameGender})`;
+
+          resolve({
+            displayLabel,
+            nameGender,
+            translatedName,
+          });
+        },
+      );
+    })();
   });
+}
+
+function resolveGenderForToolbar(
+  category: NameGenderCategory,
+  displayLabel: string,
+): CustomerGender | null {
+  const fromCategory = inferClearCustomerGenderFromCategory(category);
+  if (fromCategory) return fromCategory;
+  return inferClearCustomerGenderFromText(displayLabel);
 }
 
 function setButtonResult(btn: HTMLButtonElement, value: string): void {
@@ -94,12 +136,21 @@ async function onGenderButtonClick(
   btn.textContent = "…";
 
   try {
-    const result = await postDetectNameGender(subscriberName);
-    if (VALID_RESULTS.has(result)) {
-      setButtonResult(btn, result);
-      log("result", { name: subscriberName, result });
-    } else {
-      setButtonResult(btn, "error");
+    const { displayLabel, nameGender, translatedName } =
+      await postDetectNameGender(subscriberName);
+
+    setButtonResult(btn, displayLabel);
+    log("result", {
+      name: subscriberName,
+      translatedName,
+      nameGender,
+      displayLabel,
+    });
+
+    const toolbarGender = resolveGenderForToolbar(nameGender, displayLabel);
+    if (toolbarGender) {
+      await applyCustomerGenderOnPage(toolbarGender);
+      log("customer gender toolbar set to", toolbarGender);
     }
   } catch (err) {
     warn("detect failed:", err);
@@ -121,7 +172,7 @@ function injectGenderButton(titleEl: HTMLElement): boolean {
   btn.type = "button";
   btn.className = BTN_CLASS;
   btn.textContent = "gender";
-  btn.title = "Detect name gender (Gemini)";
+  btn.title = "Detect name gender and transliterate (Gemini)";
   btn.setAttribute("aria-label", "Detect subscriber name gender");
 
   btn.addEventListener("click", (e) => {

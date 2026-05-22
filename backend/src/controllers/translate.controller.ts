@@ -52,11 +52,16 @@ export async function translateBatch(
         `[translate] name-gender | user=${String(user._id)} org=${String(org._id)} | lang=${org.language} | name=${subscriberName}`,
       );
 
-      const nameGender = await detectSubscriberNameGender(
+      const agentLanguage = String(
+        body.agentLanguage ?? user.language ?? org.language,
+      ).trim();
+
+      const { translatedName, nameGender } = await detectSubscriberNameGender(
         subscriberName,
         org.language,
+        agentLanguage || "en",
       );
-      res.status(200).json({ translations: [], nameGender });
+      res.status(200).json({ translations: [], nameGender, translatedName });
     } catch (err) {
       console.error("[translate] name-gender failed:", err);
       res.status(503).json({

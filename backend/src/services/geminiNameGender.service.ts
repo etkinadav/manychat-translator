@@ -10,50 +10,97 @@ export const NAME_GENDER_VALUES = [
 
 export type NameGenderResult = (typeof NAME_GENDER_VALUES)[number];
 
+export interface NameGenderDetection {
+  translatedName: string;
+  nameGender: NameGenderResult;
+}
+
 export function buildNameGenderPrompt(
   subscriberName: string,
   organizationLanguageCode: string,
+  agentLanguageCode: string,
 ): string {
-  const langLabel = languageLabel(organizationLanguageCode);
+  const orgLangLabel = languageLabel(organizationLanguageCode);
+  const agentLangLabel = languageLabel(agentLanguageCode);
   const name = subscriberName.trim();
 
-  return `I want to know whether the name "${name}" is typically a man's name or a woman's name in ${langLabel} (${organizationLanguageCode}).
+  return `Contact name as shown in the chat/CRM: "${name}"
 
-Return exactly ONE of these four answers (nothing else — no explanation):
+Return exactly TWO lines (no labels, no explanation, no markdown):
+Line 1: The person's name written in ${agentLangLabel} (${agentLanguageCode}) — transliterate or translate only the personal name (no titles, no gender words).
+Line 2: Exactly one of these four answers:
 male
 female
 male or female
 unknown
 
-Rules:
+Use ${orgLangLabel} (${organizationLanguageCode}) cultural context to judge the name.
+Rules for line 2:
 - male — clearly a man's name
 - female — clearly a woman's name
 - male or female — the name can belong to both genders
-- unknown — not clear that this is a personal name, or gender cannot be determined`;
+- unknown — not a personal name, or gender cannot be determined`;
 }
 
-export function parseNameGenderResponse(raw: string): NameGenderResult | null {
-  const firstLine = raw.trim().split(/\r?\n/)[0]?.trim().toLowerCase() ?? "";
-  const normalized = firstLine.replace(/^["'`]+|["'`]+$/g, "").trim();
+/** Parse line 2; "male or female" must be checked before "male" / "female". */
+export function parseGenderCategoryLine(line: string): NameGenderResult | null {
+  const normalized = line
+    .trim()
+    .toLowerCase()
+    .replace(/^["'`]+|["'`]+$/g, "")
+    .trim();
 
-  if (normalized === "male or female") return "male or female";
-  if (normalized === "male") return "male";
+  if (normalized.includes("male or female")) return "male or female";
   if (normalized === "female") return "female";
+  if (normalized === "male") return "male";
   if (normalized === "unknown") return "unknown";
 
   return null;
 }
 
+export function parseNameGenderResponse(
+  raw: string,
+  fallbackName: string,
+): NameGenderDetection | null {
+  const lines = raw
+    .trim()
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+
+  if (lines.length === 0) return null;
+
+  let translatedName = fallbackName.trim();
+  let genderLine = lines[lines.length - 1] ?? "";
+
+  if (lines.length >= 2) {
+    translatedName = lines[0]
+      .replace(/^["'`]+|["'`]+$/g, "")
+      .trim();
+    genderLine = lines[lines.length - 1] ?? genderLine;
+  }
+
+  const nameGender = parseGenderCategoryLine(genderLine);
+  if (!nameGender || !translatedName) return null;
+
+  return { translatedName, nameGender };
+}
+
 export async function detectSubscriberNameGender(
   subscriberName: string,
   organizationLanguageCode: string,
-): Promise<NameGenderResult> {
-  const prompt = buildNameGenderPrompt(subscriberName, organizationLanguageCode);
+  agentLanguageCode: string,
+): Promise<NameGenderDetection> {
+  const prompt = buildNameGenderPrompt(
+    subscriberName,
+    organizationLanguageCode,
+    agentLanguageCode,
+  );
 
   console.log("[gemini-name-gender] prompt:\n", prompt);
 
   const raw = await generateWithGemini(prompt);
-  const parsed = parseNameGenderResponse(raw);
+  const parsed = parseNameGenderResponse(raw, subscriberName);
 
   console.log("[gemini-name-gender] raw response:", raw);
   console.log("[gemini-name-gender] parsed:", parsed ?? "invalid");
@@ -63,4 +110,11 @@ export async function detectSubscriberNameGender(
   }
 
   return parsed;
+}
+
+export function formatNameGenderDisplayLabel(
+  translatedName: string,
+  nameGender: NameGenderResult,
+): string {
+  return `${translatedName} (${nameGender})`;
 }
