@@ -3,6 +3,7 @@
  */
 
 import { readAutoTranslateEnabled } from "./auto-translate";
+import { findTextElementsInBlock } from "./incoming-message-text";
 import { getDomProfile } from "./site-profile/context";
 
 function dom() {
@@ -16,18 +17,6 @@ const PROCESSED_ATTR = "data-ai-processed";
 export const CONVERSATION_SUMMARY_CLASS = "mc-conversation-summary";
 /** In-thread summary block only — must not match the composer toolbar button. */
 export const SUMMARY_ATTR = "data-mc-chat-summary";
-
-function hasMeaningfulText(el: Element): boolean {
-  return (el.textContent ?? "").trim().length > 0;
-}
-
-function findTextElementInBlock(block: Element): HTMLElement | null {
-  for (const selector of dom().incoming.textWithinBlock) {
-    const candidate = block.querySelector<HTMLElement>(selector);
-    if (candidate && hasMeaningfulText(candidate)) return candidate;
-  }
-  return null;
-}
 
 function isSkippableMessageBlock(block: Element): boolean {
   return block.matches(dom().incoming.skipBlocks);
@@ -97,34 +86,36 @@ export async function collectConversationTranscript(): Promise<string | null> {
   for (const block of Array.from(blocks)) {
     if (isSkippableMessageBlock(block)) continue;
 
-    const textEl = findTextElementInBlock(block);
-    if (!textEl) continue;
-
-    const original = (textEl.textContent ?? "").trim();
-    if (!original) continue;
+    const textEls = findTextElementsInBlock(block);
+    if (textEls.length === 0) continue;
 
     const speaker = detectSpeaker(block);
 
-    if (useTranslations) {
-      const placeholder = textEl.nextElementSibling;
-      if (
-        !(placeholder instanceof HTMLElement) ||
-        !placeholder.classList.contains(TRANSLATION_CLASS) ||
-        placeholder.getAttribute(STATUS_ATTR) !== "done"
-      ) {
+    for (const textEl of textEls) {
+      const original = (textEl.textContent ?? "").trim();
+      if (!original) continue;
+
+      if (useTranslations) {
+        const placeholder = textEl.nextElementSibling;
+        if (
+          !(placeholder instanceof HTMLElement) ||
+          !placeholder.classList.contains(TRANSLATION_CLASS) ||
+          placeholder.getAttribute(STATUS_ATTR) !== "done"
+        ) {
+          continue;
+        }
+
+        const translation = getTranslationText(placeholder);
+        if (!translation) continue;
+
+        index += 1;
+        entries.push(formatTranscriptEntry(index, speaker, original, translation));
         continue;
       }
 
-      const translation = getTranslationText(placeholder);
-      if (!translation) continue;
-
       index += 1;
-      entries.push(formatTranscriptEntry(index, speaker, original, translation));
-      continue;
+      entries.push(formatTranscriptEntry(index, speaker, original));
     }
-
-    index += 1;
-    entries.push(formatTranscriptEntry(index, speaker, original));
   }
 
   if (entries.length === 0) return null;
@@ -145,8 +136,7 @@ function stripMessageContent(wrapper: HTMLElement): void {
     .forEach((el) => el.remove());
 
   wrapper.querySelectorAll(dom().incoming.messageBlock).forEach((block) => {
-    const textEl = findTextElementInBlock(block);
-    if (textEl) {
+    for (const textEl of findTextElementsInBlock(block)) {
       textEl.textContent = "";
       textEl.removeAttribute(PROCESSED_ATTR);
     }

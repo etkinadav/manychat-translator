@@ -40,7 +40,7 @@
 | שדה | סוג | תיאור |
 |-----|-----|--------|
 | `messageBlock` | `string` | סלקטור CSS לבלוק הודעה אחת |
-| `textWithinBlock` | `string[]` | סלקטורים לטקסט המקורי (לפי סדר עדיפות) |
+| `textWithinBlock` | `string[]` | סלקטורים לטקסט המקורי (לפי סדר עדיפות). התוסף מתרגם **את כל** האלמנטים התואמים בבלוק (למשל ציטוט + תגובה ב-WhatsApp), לא רק את הראשון |
 | `skipBlocks` | `string` | סלקטור מורכב להודעות meta/system שלא מתורגמות |
 | `translationInsert` | `"afterText"` | איפה להזריק `.mc-ai-translation` |
 | `speaker.agentPatterns` | `string[]` | מחרוזות לבדיקת regex — זיהוי הודעת נציג |

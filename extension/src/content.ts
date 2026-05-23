@@ -33,6 +33,7 @@ import { initOutgoing, rescanOutgoingComposer } from "./outgoing";
 import { bootstrapExtensionOnPage } from "./site-profile/bootstrap";
 import { getDomProfile, isFeatureEnabled } from "./site-profile/context";
 import { initSubscriberGender, rescanSubscriberGender } from "./subscriber-gender";
+import { findTextElementsInBlock } from "./incoming-message-text";
 import { fetchSession } from "./session-client";
 
 function dom() {
@@ -96,37 +97,6 @@ async function refreshTranslationAllowed(): Promise<boolean> {
 // ---------------------------------------------------------------------------
 // Detection
 // ---------------------------------------------------------------------------
-
-function findTextElementInBlock(block: Element): HTMLElement | null {
-  for (const selector of dom().incoming.textWithinBlock) {
-    const candidate = block.querySelector<HTMLElement>(selector);
-    if (candidate && hasMeaningfulText(candidate)) return candidate;
-  }
-  const walker = document.createTreeWalker(block, NodeFilter.SHOW_ELEMENT, {
-    acceptNode: (node) =>
-      hasDirectText(node as HTMLElement)
-        ? NodeFilter.FILTER_ACCEPT
-        : NodeFilter.FILTER_SKIP,
-  });
-  const node = walker.nextNode() as HTMLElement | null;
-  return node && hasMeaningfulText(node) ? node : null;
-}
-
-function hasDirectText(el: Element): boolean {
-  for (const child of Array.from(el.childNodes)) {
-    if (
-      child.nodeType === Node.TEXT_NODE &&
-      (child.textContent ?? "").trim() !== ""
-    ) {
-      return true;
-    }
-  }
-  return false;
-}
-
-function hasMeaningfulText(el: Element): boolean {
-  return (el.textContent ?? "").trim().length > 0;
-}
 
 /** Automation / system / meta rows — not real chat bubbles. */
 function isSkippableMessageBlock(block: Element): boolean {
@@ -264,9 +234,10 @@ function scanAndQueue(root: ParentNode = document): number {
       skipped++;
       continue;
     }
-    const textEl = findTextElementInBlock(block);
-    if (!textEl) continue;
-    if (queueForTranslation(textEl)) queued++;
+    const textEls = findTextElementsInBlock(block);
+    for (const textEl of textEls) {
+      if (queueForTranslation(textEl)) queued++;
+    }
   }
   if (queued > 0 || skipped > 0) {
     log(`scan: ${blocks.length} blocks, ${queued} queued, ${skipped} skipped (meta/system)`);
