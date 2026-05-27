@@ -48,5 +48,7 @@ export interface ExtensionWebsite {
   slug: string;
   name: string;
   urlPatterns: string[];
+  /** Gemini prompt label for the other party (e.g. customer, subscriber). */
+  othersRole?: string;
   domProfile: WebsiteDomProfile;
 }

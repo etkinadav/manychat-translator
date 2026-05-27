@@ -74,6 +74,7 @@ export const manychatWebsiteSeed = {
   name: "Manychat",
   enabled: true,
   urlPatterns: ["https://app.manychat.com/*"],
+  othersRole: "subscriber",
   profileVersion: 1,
   notes: "Initial seed from extension selectors",
   domProfile: manychatDomProfile,

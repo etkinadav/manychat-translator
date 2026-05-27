@@ -22,7 +22,11 @@ import {
   removeConversationSummary,
   showConversationSummary,
 } from "./chat-transcript";
-import { getDomProfile, isFeatureEnabled } from "./site-profile/context";
+import {
+  getActiveWebsiteSlug,
+  getDomProfile,
+  isFeatureEnabled,
+} from "./site-profile/context";
 import {
   hideAgentPreviewSnackbar,
   showAgentPreviewSnackbar,
@@ -1014,6 +1018,11 @@ interface OutgoingTranslateResult {
   dryRun?: boolean;
 }
 
+function websiteSlugForTranslate(): { websiteSlug?: string } {
+  const slug = getActiveWebsiteSlug();
+  return slug ? { websiteSlug: slug } : {};
+}
+
 /** Plain Google batch translate (org → agent), no gender wrappers. */
 function postPlainGoogleTranslate(text: string): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -1022,7 +1031,7 @@ function postPlainGoogleTranslate(text: string): Promise<string> {
       REQUEST_TIMEOUT_MS,
     );
     chrome.runtime.sendMessage(
-      { type: "translate", texts: [text] },
+      { type: "translate", texts: [text], ...websiteSlugForTranslate() },
       (response: CsTranslateReply | undefined) => {
         window.clearTimeout(timeout);
         if (chrome.runtime.lastError) {
@@ -1077,6 +1086,7 @@ function postTranslateOutgoingGoogle(
         texts: [userText],
         outgoingGoogle: true,
         customerGender,
+        ...websiteSlugForTranslate(),
         ...(agentGender === "female" || agentGender === "male"
           ? { agentGender }
           : {}),
@@ -1116,6 +1126,7 @@ function postTranslateOutgoing(
         texts: [userText],
         outgoing: true,
         customerGender,
+        ...websiteSlugForTranslate(),
       },
       (response: CsTranslateReply | undefined) => {
         window.clearTimeout(timeout);

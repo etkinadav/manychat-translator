@@ -24,6 +24,7 @@ let sessionLoadedAt = 0;
 interface BgTranslateMessage {
   type: "translate";
   texts: string[];
+  websiteSlug?: string;
   outgoing?: boolean;
   outgoingGoogle?: boolean;
   agentGender?: "male" | "female";
@@ -180,6 +181,7 @@ async function handleTranslate(
       headers,
       body: JSON.stringify({
         texts: message.texts,
+        ...(message.websiteSlug ? { websiteSlug: message.websiteSlug } : {}),
         ...(message.outgoingGoogle
           ? {
               outgoingGoogle: true,

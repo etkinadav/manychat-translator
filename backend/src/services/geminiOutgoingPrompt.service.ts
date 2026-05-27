@@ -2,6 +2,7 @@ import { languageLabel } from "../constants/languages";
 import type { OrganizationTermCategory } from "../types/organizationTerms";
 import type { CustomerGender } from "./customerGender";
 import { formatOrganizationTermsForPrompt } from "./formatOrganizationTermsForPrompt";
+import { othersRolePossessive } from "./othersRole";
 
 export interface GeminiOutgoingPromptInput {
   messageText: string;
@@ -12,6 +13,7 @@ export interface GeminiOutgoingPromptInput {
   organizationTerms?: OrganizationTermCategory[];
   agentGender: "" | "male" | "female";
   customerGender: CustomerGender;
+  othersRole: string;
 }
 
 export interface GeminiOutgoingPromptPayload {
@@ -23,6 +25,7 @@ export interface GeminiOutgoingPromptPayload {
     organizationName: string;
     agentGender: string;
     customerGender: string;
+    othersRole: string;
     messageCharCount: number;
   };
 }
@@ -42,6 +45,8 @@ export function buildGeminiOutgoingPrompt(
   const targetLabel = languageLabel(input.targetLanguageCode);
   const agentGender = resolveAgentGender(input.agentGender);
   const customerGender = input.customerGender;
+  const othersRole = input.othersRole.trim() || "customer";
+  const othersPoss = othersRolePossessive(othersRole);
   const orgContext = input.organizationContext.trim();
   const orgName = input.organizationName.trim() || "the company";
   const message = input.messageText.trim();
@@ -55,7 +60,7 @@ export function buildGeminiOutgoingPrompt(
   const contextBlock =
     contextLines.length > 0 ? `\n${contextLines.join("\n")}` : "";
 
-  const prompt = `I am a ${agentGender} customer support agent at ${orgName}. I am writing to a ${customerGender} customer. Translate my reply from ${sourceLabel} (${input.sourceLanguageCode}) to ${targetLabel} (${input.targetLanguageCode}). Use correct grammar for the customer's gender and a natural everyday conversational tone that sounds fluent and human, while staying professional and avoiding overly formal, literary, or exaggerated wording.${contextBlock}
+  const prompt = `I am a ${agentGender} customer support agent at ${orgName}. I am writing to a ${customerGender} ${othersRole}. Translate my reply from ${sourceLabel} (${input.sourceLanguageCode}) to ${targetLabel} (${input.targetLanguageCode}). Use correct grammar for the ${othersPoss} gender and a natural everyday conversational tone that sounds fluent and human, while staying professional and avoiding overly formal, literary, or exaggerated wording.${contextBlock}
 
 Message to translate:
 ${message}
@@ -73,6 +78,7 @@ ${message}
       organizationName: orgName,
       agentGender,
       customerGender,
+      othersRole,
       messageCharCount: message.length,
     },
   };

@@ -2,6 +2,7 @@ import { languageLabel } from "../constants/languages";
 import type { OrganizationTermCategory } from "../types/organizationTerms";
 import type { CustomerGender } from "./customerGender";
 import { formatOrganizationTermsForPrompt } from "./formatOrganizationTermsForPrompt";
+import { othersRolePossessive } from "./othersRole";
 import type { GeminiOutgoingPromptPayload } from "./geminiOutgoingPrompt.service";
 
 export interface GeminiIncomingPromptInput {
@@ -13,6 +14,7 @@ export interface GeminiIncomingPromptInput {
   organizationTerms?: OrganizationTermCategory[];
   agentGender: "" | "male" | "female";
   customerGender: CustomerGender;
+  othersRole: string;
 }
 
 function resolveAgentGender(gender: "" | "male" | "female"): "male" | "female" {
@@ -29,6 +31,8 @@ export function buildGeminiIncomingPrompt(
   const targetLabel = languageLabel(input.targetLanguageCode);
   const agentGender = resolveAgentGender(input.agentGender);
   const customerGender = input.customerGender;
+  const othersRole = input.othersRole.trim() || "customer";
+  const othersPoss = othersRolePossessive(othersRole);
   const orgContext = input.organizationContext.trim();
   const orgName = input.organizationName.trim() || "the company";
   const message = input.messageText.trim();
@@ -42,9 +46,9 @@ export function buildGeminiIncomingPrompt(
   const contextBlock =
     contextLines.length > 0 ? `\n${contextLines.join("\n")}` : "";
 
-  const prompt = `I am a ${agentGender} customer support agent at ${orgName}. A ${customerGender} customer sent me a message in ${sourceLabel} (${input.sourceLanguageCode}). Translate it to ${targetLabel} (${input.targetLanguageCode}) so I can read and reply. Use correct grammar for the customer's gender and apply the business terms below when relevant.${contextBlock}
+  const prompt = `I am a ${agentGender} customer support agent at ${orgName}. A ${customerGender} ${othersRole} sent me a message in ${sourceLabel} (${input.sourceLanguageCode}). Translate it to ${targetLabel} (${input.targetLanguageCode}) so I can read and reply. Use correct grammar for the ${othersPoss} gender and apply the business terms below when relevant.${contextBlock}
 
-Customer message:
+Message from the ${othersRole}:
 ${message}
 
 === OUTPUT RULES ===
@@ -60,6 +64,7 @@ ${message}
       organizationName: orgName,
       agentGender,
       customerGender,
+      othersRole,
       messageCharCount: message.length,
     },
   };

@@ -6,6 +6,8 @@ import { AuthService } from "../../auth/auth.service";
 import { ProfileService } from "../../services/profile.service";
 import { OrganizationsService } from "../../services/organizations.service";
 import { ExtensionSyncService } from "../../services/extension-sync.service";
+import { WebsitesService } from "../../services/websites.service";
+import type { WebsiteListItem } from "../../models/website.model";
 import type { OrganizationSummary } from "../../models/organization.model";
 import type { UserProfile } from "../../models/user-profile.model";
 
@@ -49,6 +51,39 @@ export class ConfigComponent implements OnInit {
   ngOnInit(): void {
     this.extensionId = this.extensionSyncService.getExtensionId();
     this.loadProfile();
+    this.loadWebsiteSettings();
+  }
+
+  loadWebsiteSettings(): void {
+    this.websitesService.list().subscribe({
+      next: ({ websites }) => {
+        this.websiteSettings = websites.map((w) => ({
+          ...w,
+          othersRole: w.othersRole?.trim() || "customer",
+        }));
+      },
+      error: () => {
+        this.websiteSettings = [];
+      },
+    });
+  }
+
+  saveWebsiteOthersRole(site: WebsiteListItem): void {
+    const othersRole = site.othersRole.trim() || "customer";
+    this.websitesService.updateOthersRole(site.id, othersRole).subscribe({
+      next: () => {
+        this.websiteSaveStatus = {
+          ...this.websiteSaveStatus,
+          [site.id]: "Saved.",
+        };
+      },
+      error: (err: HttpErrorResponse) => {
+        this.websiteSaveStatus = {
+          ...this.websiteSaveStatus,
+          [site.id]: this.httpErrorMessage(err, "Save failed"),
+        };
+      },
+    });
   }
 
   linkExtension(): void {

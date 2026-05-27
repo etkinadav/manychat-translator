@@ -84,6 +84,42 @@
       </div>
     </section>
 
+    <section class="config-section" *ngIf="websiteSettings.length > 0">
+      <h2>Websites (Gemini)</h2>
+      <p class="field-hint">
+        Word used in AI prompts instead of &quot;customer&quot; (e.g.
+        subscriber, contact). Applies per site for all organizations using it.
+      </p>
+      <ul class="website-role-list">
+        <li class="website-role-list__item" *ngFor="let site of websiteSettings">
+          <div class="website-role-list__head">
+            <strong>{{ site.name }}</strong>
+            <span class="muted">{{ site.slug }}</span>
+          </div>
+          <div class="field website-role-list__field">
+            <label [for]="'others-role-' + site.id">Others role</label>
+            <input
+              [id]="'others-role-' + site.id"
+              type="text"
+              maxlength="48"
+              [(ngModel)]="site.othersRole"
+              placeholder="customer"
+            />
+          </div>
+          <button
+            type="button"
+            class="btn-secondary btn-small"
+            (click)="saveWebsiteOthersRole(site)"
+          >
+            Save
+          </button>
+          <p class="field-hint" *ngIf="websiteSaveStatus[site.id]">
+            {{ websiteSaveStatus[site.id] }}
+          </p>
+        </li>
+      </ul>
+    </section>
+
     <section class="config-section" *ngIf="profile.organization as org">
       <h2>Organization</h2>
       <p class="connected-badge">

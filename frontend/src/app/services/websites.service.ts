@@ -10,4 +10,13 @@ export class WebsitesService {
   list(): Observable<{ websites: WebsiteListItem[] }> {
     return this.http.get<{ websites: WebsiteListItem[] }>("/api/websites");
   }
+
+  updateOthersRole(
+    id: string,
+    othersRole: string,
+  ): Observable<{ website: WebsiteListItem }> {
+    return this.http.patch<{ website: WebsiteListItem }>(`/api/websites/${id}`, {
+      othersRole,
+    });
+  }
 }

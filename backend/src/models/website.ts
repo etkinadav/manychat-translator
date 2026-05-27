@@ -6,6 +6,8 @@ export interface IWebsite extends Document {
   name: string;
   enabled: boolean;
   urlPatterns: string[];
+  /** Gemini prompt label for the other party (e.g. customer, subscriber). */
+  othersRole: string;
   domProfile: WebsiteDomProfile;
   profileVersion: number;
   notes: string;
@@ -35,6 +37,12 @@ const websiteSchema = new mongoose.Schema<IWebsite>(
       type: [String],
       required: true,
       default: [],
+    },
+    othersRole: {
+      type: String,
+      default: "customer",
+      trim: true,
+      maxlength: 48,
     },
     domProfile: {
       type: mongoose.Schema.Types.Mixed,

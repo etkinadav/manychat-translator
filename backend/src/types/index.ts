@@ -18,6 +18,8 @@ export interface TranslateRequest {
   incomingGemini?: boolean;
   /** Customer gender for Gemini prompts (extension UI). Default: male. */
   customerGender?: "male" | "female";
+  /** Active website slug from the extension (resolves othersRole). */
+  websiteSlug?: string;
   /** Detect subscriber name gender via Gemini (Manychat header). */
   nameGender?: boolean;
   subscriberName?: string;

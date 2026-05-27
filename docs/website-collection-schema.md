@@ -21,6 +21,7 @@
 | `name` | `string` | כן | שם תצוגה ("Manychat") |
 | `enabled` | `boolean` | כן | האם מוצג בבחירת אתרים בארגון (ברירת מחדל: `true`) |
 | `urlPatterns` | `string[]` | כן | תבניות התאמה ל-Chrome / בדיקת URL (למשל `https://app.manychat.com/*`) |
+| `othersRole` | `string` | לא | מילה בפרומט Gemini במקום "customer" (למשל `subscriber`, `contact`). ברירת מחדל: `customer` |
 | `domProfile` | `object` | כן | כל הסלקטורים והפיצ'רים — ראה למטה |
 | `profileVersion` | `number` | לא | גרסת פרופיל (למיגרציות כשמשתנים סלקטורים) |
 | `notes` | `string` | לא | הערות למפתחים |

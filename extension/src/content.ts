@@ -31,7 +31,11 @@ import {
 import { removeConversationSummary } from "./chat-transcript";
 import { initOutgoing, rescanOutgoingComposer } from "./outgoing";
 import { bootstrapExtensionOnPage } from "./site-profile/bootstrap";
-import { getDomProfile, isFeatureEnabled } from "./site-profile/context";
+import {
+  getActiveWebsiteSlug,
+  getDomProfile,
+  isFeatureEnabled,
+} from "./site-profile/context";
 import { initSubscriberGender, rescanSubscriberGender } from "./subscriber-gender";
 import { findTextElementsInBlock } from "./incoming-message-text";
 import { fetchSession } from "./session-client";
@@ -272,7 +276,13 @@ function postTranslate(texts: string[]): Promise<string[]> {
       REQUEST_TIMEOUT_MS,
     );
     chrome.runtime.sendMessage(
-      { type: "translate", texts },
+      {
+        type: "translate",
+        texts,
+        ...(getActiveWebsiteSlug()
+          ? { websiteSlug: getActiveWebsiteSlug() }
+          : {}),
+      },
       (response: CsTranslateReply | undefined) => {
         window.clearTimeout(timeout);
         if (chrome.runtime.lastError) {
@@ -395,6 +405,9 @@ function postTranslateIncomingGemini(
         texts: [text],
         incomingGemini: true,
         customerGender,
+        ...(getActiveWebsiteSlug()
+          ? { websiteSlug: getActiveWebsiteSlug() }
+          : {}),
       },
       (response: CsTranslateReply | undefined) => {
         window.clearTimeout(timeout);

@@ -10,6 +10,10 @@ export function getActiveWebsite(): ExtensionWebsite | null {
   return activeWebsite;
 }
 
+export function getActiveWebsiteSlug(): string | undefined {
+  return activeWebsite?.slug;
+}
+
 export function getDomProfile(): WebsiteDomProfile {
   if (!activeWebsite) {
     throw new Error("[ManychatTranslator] no active website profile");

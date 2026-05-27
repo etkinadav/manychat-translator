@@ -20,6 +20,7 @@ export async function runGeminiIncomingTranslate(
   org: IOrganization,
   messageText: string,
   customerGender: CustomerGender,
+  othersRole: string,
 ): Promise<GeminiIncomingTranslateResult> {
   const { source, target } = resolveLanguagePairFromProfile({
     userLanguage: user.language || "en",
@@ -36,6 +37,7 @@ export async function runGeminiIncomingTranslate(
     organizationTerms: Array.isArray(org.terms) ? org.terms : [],
     agentGender: (user.gender || "") as "" | "male" | "female",
     customerGender,
+    othersRole,
   });
 
   logGeminiIncomingPromptDetails(payload);

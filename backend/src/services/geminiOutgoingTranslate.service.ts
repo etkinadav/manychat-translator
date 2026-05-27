@@ -30,6 +30,7 @@ function buildOutgoingGeminiPayload(
   org: IOrganization,
   messageText: string,
   customerGender: CustomerGender,
+  othersRole: string,
 ): GeminiOutgoingPromptPayload {
   const { source, target } = resolveLanguagePairFromProfile({
     userLanguage: user.language || "en",
@@ -46,6 +47,7 @@ function buildOutgoingGeminiPayload(
     organizationTerms: Array.isArray(org.terms) ? org.terms : [],
     agentGender: (user.gender || "") as "" | "male" | "female",
     customerGender,
+    othersRole,
   });
 }
 
@@ -57,12 +59,14 @@ export function runGeminiOutgoingDryRun(
   org: IOrganization,
   messageText: string,
   customerGender: CustomerGender,
+  othersRole: string,
 ): GeminiOutgoingDryRunResult {
   const payload = buildOutgoingGeminiPayload(
     user,
     org,
     messageText,
     customerGender,
+    othersRole,
   );
 
   if (isGeminiOutgoingDryRunEnabled()) {
@@ -86,12 +90,14 @@ export async function runGeminiOutgoingTranslate(
   org: IOrganization,
   messageText: string,
   customerGender: CustomerGender,
+  othersRole: string,
 ): Promise<GeminiOutgoingTranslateResult> {
   const payload = buildOutgoingGeminiPayload(
     user,
     org,
     messageText,
     customerGender,
+    othersRole,
   );
   const { source, target } = resolveLanguagePairFromProfile({
     userLanguage: user.language || "en",

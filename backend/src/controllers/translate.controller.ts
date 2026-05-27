@@ -28,6 +28,7 @@ import { polishHebrewOutgoingTranslation } from "../services/hebrewOutgoingPolis
 import { organizationDisplayName } from "./organization.helpers";
 import { resolveLanguagePairFromProfile } from "../services/translateLanguagePair";
 import { resolveTranslateOrganizationContext } from "./translateOrganizationContext";
+import { resolveOthersRoleForOrganization } from "../services/website.service";
 
 /**
  * POST /api/translate — requires JWT; languages from user + organization.
@@ -208,6 +209,10 @@ export async function translateBatch(
       }
 
       const customerGender = parseCustomerGender(body?.customerGender);
+      const othersRole = await resolveOthersRoleForOrganization(
+        org,
+        body?.websiteSlug,
+      );
 
       if (isGeminiOutgoingDryRunEnabled()) {
         const dryRunResult = runGeminiOutgoingDryRun(
@@ -215,6 +220,7 @@ export async function translateBatch(
           org,
           messageText,
           customerGender,
+          othersRole,
         );
         res.status(200).json({
           translations: dryRunResult.translations,
@@ -226,7 +232,7 @@ export async function translateBatch(
       }
 
       console.log(
-        `[translate] outgoing | user=${String(user._id)} org=${String(org._id)} | Gemini | customer=${customerGender} | chars=${messageText.length}`,
+        `[translate] outgoing | user=${String(user._id)} org=${String(org._id)} | Gemini | customer=${customerGender} | othersRole=${othersRole} | chars=${messageText.length}`,
       );
 
       const geminiResult = await runGeminiOutgoingTranslate(
@@ -234,6 +240,7 @@ export async function translateBatch(
         org,
         messageText,
         customerGender,
+        othersRole,
       );
       res.status(200).json({
         translations: geminiResult.translations,
@@ -257,8 +264,12 @@ export async function translateBatch(
       }
 
       const customerGender = parseCustomerGender(body?.customerGender);
+      const othersRole = await resolveOthersRoleForOrganization(
+        org,
+        body?.websiteSlug,
+      );
       console.log(
-        `[translate] incoming-gemini | user=${String(user._id)} org=${String(org._id)} | customer=${customerGender} | chars=${messageText.length}`,
+        `[translate] incoming-gemini | user=${String(user._id)} org=${String(org._id)} | customer=${customerGender} | othersRole=${othersRole} | chars=${messageText.length}`,
       );
 
       const geminiResult = await runGeminiIncomingTranslate(
@@ -266,6 +277,7 @@ export async function translateBatch(
         org,
         messageText,
         customerGender,
+        othersRole,
       );
       res.status(200).json({
         translations: geminiResult.translations,

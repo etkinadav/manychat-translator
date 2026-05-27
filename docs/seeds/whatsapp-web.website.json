@@ -1,0 +1,46 @@
+{
+  "slug": "whatsapp-web",
+  "name": "WhatsApp Web",
+  "enabled": true,
+  "urlPatterns": ["https://web.whatsapp.com/*"],
+  "othersRole": "customer",
+  "profileVersion": 1,
+  "notes": "WhatsApp Web — contenteditable composer, conv-msg containers, header chat title",
+  "domProfile": {
+    "incoming": {
+      "messageBlock": "div[data-testid=\"msg-container\"]",
+      "textWithinBlock": [
+        "span[data-testid=\"selectable-text\"]",
+        ".copyable-text span[data-testid=\"selectable-text\"]",
+        "div.copyable-text span[data-testid=\"selectable-text\"]"
+      ],
+      "skipBlocks": "[role=\"row\"]:not(:has([data-testid=\"msg-container\"]))",
+      "translationInsert": "afterText",
+      "speaker": {
+        "agentPatterns": ["message-out", "aria-label=\"You:\""],
+        "customerPatterns": ["message-in"]
+      }
+    },
+    "composer": {
+      "textarea": "div[contenteditable=\"true\"][data-testid=\"conversation-compose-box-input\"]",
+      "toolbar": { "mode": "afterTextarea" }
+    },
+    "subscriber": {
+      "enabled": true,
+      "titleSelector": "[data-testid=\"conversation-info-header-chat-title\"]"
+    },
+    "summary": {
+      "messageWrapper": "[class*=\"_wrapper_\"]",
+      "messageBlock": "div[data-testid=\"msg-container\"]",
+      "insertMode": "afterLastBlock"
+    },
+    "features": {
+      "incomingAutoTranslate": true,
+      "outgoingTranslate": true,
+      "incomingGeminiButton": true,
+      "conversationSummary": true,
+      "subscriberGender": true,
+      "autoTranslateToggle": true
+    }
+  }
+}

@@ -4,6 +4,40 @@
   width: auto;
 }
 
+.website-role-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.website-role-list__item {
+  padding: 12px 0;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.website-role-list__head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.website-role-list__field {
+  margin-bottom: 8px;
+}
+
+.btn-small {
+  padding: 6px 12px;
+  font-size: 13px;
+}
+
+.btn-row button {
+  width: auto;
+}
+
 input[readonly],
 textarea.readonly-area {
   background: #f1f5f9;

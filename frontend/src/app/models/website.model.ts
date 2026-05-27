@@ -4,4 +4,6 @@ export interface WebsiteListItem {
   name: string;
   enabled: boolean;
   urlPatterns: string[];
+  /** Gemini prompt label for the other party (e.g. customer, subscriber). */
+  othersRole: string;
 }
